@@ -35,10 +35,13 @@ jobs:
           cache: maven
 
       # Morphium is not yet on Maven Central – build from source first.
+      # Using the Bardioc1977 fork on feature/x509-auth which contains the
+      # MONGODB-X509 authentication support required by this extension.
       - name: Checkout Morphium
         uses: actions/checkout@v4
         with:
-          repository: sboesebeck/morphium
+          repository: Bardioc1977/morphium
+          ref: feature/x509-auth
           path: morphium-src
 
       - name: Install Morphium SNAPSHOT
