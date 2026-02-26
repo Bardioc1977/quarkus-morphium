@@ -32,6 +32,13 @@
     </dependency>
     <!-- ClassGraph for @Entity scanning during build.
          Comes transitively from quarkus-morphium (runtime) → morphium. -->
+
+    <!-- Testcontainers – only needed at build time for Dev Services.
+         Version managed by quarkus-bom; no explicit version required. -->
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers</artifactId>
+    </dependency>
   </dependencies>
 
   <build>

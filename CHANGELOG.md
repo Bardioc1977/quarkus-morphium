@@ -28,3 +28,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Java 25 compatible: no `sun.*` imports, no `Unsafe` access, no `--add-opens` for internal APIs
 - `InMemDriver` support for `@QuarkusTest` without a running MongoDB instance
 - Quarkus 3.32.1 support
+- Dev Services: automatic MongoDB container start in dev and test mode via Testcontainers
+  (`quarkus.morphium.devservices.*` config group; disabled when `morphium.hosts` is set explicitly)
