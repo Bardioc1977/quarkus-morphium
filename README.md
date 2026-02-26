@@ -256,7 +256,7 @@ mvn verify
 
 Contributions are welcome. Please open an issue before submitting a pull request for significant changes.
 
-This project follows the [Quarkus Code of Conduct](https://github.com/quarkusio/quarkus/blob/main/CODE_OF_CONDUCT.md).
+This project follows the [Contributor Covenant Code of Conduct](https://www.contributor-covenant.org/version/2/1/code_of_conduct/).
 
 ## License
 
