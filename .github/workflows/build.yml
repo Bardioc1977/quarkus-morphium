@@ -14,6 +14,7 @@ on:
       - 'CHANGELOG.md'
       - 'LICENSE'
       - '.gitignore'
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
