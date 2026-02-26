@@ -1,0 +1,13 @@
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.DS_Store
+.idea/
+*.iml
+.settings/
+.project
+.classpath
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
