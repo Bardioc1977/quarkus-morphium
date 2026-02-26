@@ -26,7 +26,7 @@
     </dependency>
     <!-- The Morphium ORM library -->
     <dependency>
-      <groupId>de.caluga.morphium</groupId>
+      <groupId>de.caluga</groupId>
       <artifactId>morphium</artifactId>
     </dependency>
   </dependencies>
