@@ -85,6 +85,7 @@ public class MorphiumProcessor {
                                BuildProducer<ReflectiveClassBuildItem> out) {
         log.debug("Morphium: registering {} for reflection (native image)", className);
         out.produce(ReflectiveClassBuildItem.builder(className)
+            .constructors(true)
             .methods(true)
             .fields(true)
             .build());

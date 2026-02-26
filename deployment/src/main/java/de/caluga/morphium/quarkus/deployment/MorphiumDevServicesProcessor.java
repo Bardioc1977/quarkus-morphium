@@ -86,7 +86,18 @@ public class MorphiumDevServicesProcessor {
                 .withExposedPorts(MONGO_PORT)
                 .waitingFor(Wait.forLogMessage(".*Waiting for connections.*\\n", 1));
 
-        container.start();
+        try {
+            container.start();
+        } catch (Exception e) {
+            try {
+                container.close();
+            } catch (Exception suppressed) {
+                e.addSuppressed(suppressed);
+            }
+            log.warn("Morphium Dev Services: failed to start MongoDB container – "
+                    + "falling back to configured morphium.hosts (if any). Cause: {}", e.getMessage());
+            return null;
+        }
         devContainer = container;
 
         int mappedPort = container.getMappedPort(MONGO_PORT);
