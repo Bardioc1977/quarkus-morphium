@@ -28,13 +28,11 @@ class MorphiumDevServicesConfigTest {
         var hosts = ConfigProvider.getConfig()
                 .getOptionalValue("morphium.hosts", String.class);
 
-        // Either absent (user never set it) or the default – never a random container port
+        // Either absent (user never set it) or the default – never a random container port.
+        // Container ports are typically >= 30000; the MongoDB default port is 27017.
         hosts.ifPresent(h ->
             assertThat(h)
                 .as("hosts must not be a dev-services container port in test profile")
-                .doesNotContain(":")
-                .matches(".*:\\d+")
-                // The default is localhost:27017 – no container port (e.g. :32xxx)
                 .satisfiesAnyOf(
                     v -> assertThat(v).isEqualTo("localhost:27017"),
                     v -> assertThat(Integer.parseInt(v.split(":")[1])).isLessThan(30000)
