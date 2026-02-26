@@ -1,0 +1,56 @@
+name: Build
+
+on:
+  push:
+    branches: ["main"]
+    paths-ignore:
+      - '*.md'
+      - 'CHANGELOG.md'
+      - 'LICENSE'
+      - '.gitignore'
+  pull_request:
+    paths-ignore:
+      - '*.md'
+      - 'CHANGELOG.md'
+      - 'LICENSE'
+      - '.gitignore'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout quarkus-morphium
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+
+      # Morphium is not yet on Maven Central – build from source first.
+      - name: Checkout Morphium
+        uses: actions/checkout@v4
+        with:
+          repository: sboesebeck/morphium
+          path: morphium-src
+
+      - name: Install Morphium SNAPSHOT
+        run: mvn -B install -DskipTests -f morphium-src/morphium/pom.xml
+
+      - name: Build and test
+        run: mvn -B verify
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: '**/target/surefire-reports/*.xml'
+          retention-days: 7
