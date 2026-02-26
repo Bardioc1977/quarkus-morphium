@@ -54,6 +54,8 @@ public class MorphiumProducer {
                 instance.close();
             } catch (Exception e) {
                 log.warn("Error while closing Morphium", e);
+            } finally {
+                instance = null;
             }
         }
     }
@@ -109,6 +111,10 @@ public class MorphiumProducer {
         cfg.setDatabase(config.database());
         cfg.setDriverName(config.driverName());
         cfg.setMaxConnections(config.maxConnections());
+        cfg.setDefaultReadPreferenceType(config.readPreference());
+        if (config.createIndexes()) {
+            cfg.setAutoIndexAndCappedCreationOnWrite(true);
+        }
 
         // Host configuration
         if (config.atlasUrl().isPresent()) {
