@@ -2,6 +2,7 @@ package de.caluga.morphium.quarkus;
 
 import de.caluga.morphium.Morphium;
 import de.caluga.morphium.MorphiumConfig;
+import de.caluga.morphium.driver.wire.SslHelper;
 import io.quarkus.runtime.ShutdownEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
@@ -61,6 +62,47 @@ public class MorphiumProducer {
     // Internal helpers – no reflection, no Unsafe
     // ------------------------------------------------------------------
 
+    private void configureSsl(MorphiumConfig cfg, SslConfig ssl) {
+        if (!ssl.enabled()) {
+            return;
+        }
+
+        cfg.setUseSSL(true);
+        cfg.setSslInvalidHostNameAllowed(ssl.invalidHostnameAllowed());
+
+        // Auth mechanism (e.g. MONGODB-X509)
+        ssl.authMechanism().ifPresent(cfg::setAuthMechanism);
+
+        // Build SSLContext from keystore / truststore if provided
+        String keystorePath     = ssl.keystorePath().orElse(null);
+        String keystorePassword = ssl.keystorePassword().orElse(null);
+        String truststorePath     = ssl.truststorePath().orElse(null);
+        String truststorePassword = ssl.truststorePassword().orElse(null);
+
+        if (keystorePath != null || truststorePath != null) {
+            try {
+                javax.net.ssl.SSLContext sslContext = SslHelper.createSslContext(
+                        keystorePath, keystorePassword,
+                        truststorePath, truststorePassword);
+                cfg.setSslContext(sslContext);
+                log.debug("SSLContext configured from keystore='{}', truststore='{}'",
+                        keystorePath, truststorePath);
+            } catch (Exception e) {
+                throw new IllegalStateException(
+                        "Failed to build SSLContext from morphium.ssl configuration: " + e.getMessage(), e);
+            }
+        }
+
+        // Explicit X.509 username (subject DN override)
+        ssl.x509Username().ifPresent(dn -> {
+            log.debug("Using explicit X.509 username (subject DN): {}", dn);
+            cfg.setMongoLogin(dn);
+            // No password for X.509 – set empty to avoid SCRAM credential check
+            cfg.setMongoPassword("");
+            cfg.setMongoAuthDb("$external");
+        });
+    }
+
     private Morphium buildMorphium() {
         MorphiumConfig cfg = new MorphiumConfig();
 
@@ -91,8 +133,13 @@ public class MorphiumProducer {
         cfg.setGlobalCacheValidTime((int) config.cache().globalValidTime());
         cfg.setReadCacheEnabled(config.cache().readCacheEnabled());
 
-        log.info("Creating Morphium connection to database '{}' (hosts: {})",
-            config.database(), config.hosts());
+        // TLS / X.509 settings
+        configureSsl(cfg, config.ssl());
+
+        log.info("Creating Morphium connection to database '{}' (driver: {}, ssl: {}, authMechanism: {})",
+            config.database(), config.driverName(),
+            config.ssl().enabled(),
+            config.ssl().authMechanism().orElse("SCRAM (default)"));
 
         return new Morphium(cfg);
     }

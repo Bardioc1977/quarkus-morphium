@@ -78,4 +78,7 @@ public interface MorphiumRuntimeConfig {
 
     /** Nested cache configuration. */
     CacheConfig cache();
+
+    /** Nested TLS / X.509 configuration. */
+    SslConfig ssl();
 }
