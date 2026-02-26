@@ -187,9 +187,28 @@ public class AddressEmbedded {
 }
 ```
 
-## Testing without MongoDB
+## Dev Services (automatic MongoDB container)
 
-Set the `InMemDriver` in your test profile – no Docker, no Testcontainers required:
+In **dev** (`quarkus:dev`) and **test** mode the extension automatically starts a MongoDB
+container via Testcontainers when `morphium.hosts` is **not** explicitly configured.
+No `application.properties` changes are needed.
+
+| Config key | Default | Description |
+|---|---|---|
+| `quarkus.morphium.devservices.enabled` | `true` | Set to `false` to disable |
+| `quarkus.morphium.devservices.image-name` | `mongo:8` | Docker image to use |
+| `quarkus.morphium.devservices.database-name` | `morphium-dev` | Database injected into `morphium.database` |
+
+```properties
+# Disable Dev Services and point to an external MongoDB instead:
+quarkus.morphium.devservices.enabled=false
+morphium.hosts=my-mongo:27017
+morphium.database=mydb
+```
+
+## Testing without MongoDB (InMemDriver)
+
+For **unit tests** that should run without Docker, use Morphium's built-in `InMemDriver`:
 
 ```properties
 # src/test/resources/application.properties
