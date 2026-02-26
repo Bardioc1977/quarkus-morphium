@@ -45,7 +45,7 @@ jobs:
           path: morphium-src
 
       - name: Install Morphium SNAPSHOT
-        run: mvn -B install -DskipTests -f morphium-src/pom.xml
+        run: mvn -B install -Dmaven.test.skip=true -f morphium-src/pom.xml
 
       - name: Build and test
         run: mvn -B verify
