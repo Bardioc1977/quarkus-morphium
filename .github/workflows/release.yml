@@ -44,11 +44,12 @@ jobs:
       - name: Checkout Morphium
         uses: actions/checkout@v4
         with:
-          repository: sboesebeck/morphium
+          repository: Bardioc1977/morphium
+          ref: master
           path: morphium-src
 
       - name: Install Morphium SNAPSHOT
-        run: mvn -B install -DskipTests -f morphium-src/morphium/pom.xml
+        run: mvn -B install -DskipTests -f morphium-src/pom.xml
 
       - name: Set release version
         run: mvn -B versions:set -DnewVersion=${{ inputs.version }} -DgenerateBackupPoms=false
