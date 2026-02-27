@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `@MorphiumTransactional` CDI interceptor for declarative transaction management –
+  automatically calls `startTransaction()` / `commitTransaction()` / `abortTransaction()`
+- Transaction lifecycle CDI events (`MorphiumTransactionEvent`) with `@MorphiumTxPhase` qualifier:
+  `BEFORE_COMMIT`, `AFTER_COMMIT`, `AFTER_ROLLBACK` (includes the causing exception)
 - Initial implementation of the Quarkus Morphium extension
 - `@ApplicationScoped` CDI producer for `Morphium` via `MorphiumProducer`
 - Type-safe runtime configuration via `@ConfigMapping(prefix = "morphium")`:

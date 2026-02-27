@@ -11,6 +11,7 @@ an actively maintained MongoDB ORM for Java.
 ## Features
 
 - **Zero-boilerplate CDI integration** – inject `Morphium` directly via `@Inject`; the extension manages the lifecycle
+- **Declarative transactions** – annotate methods with `@MorphiumTransactional` for automatic commit/rollback, with CDI events for transaction lifecycle hooks
 - **Type-safe configuration** – all settings live in `application.properties` under the `morphium.*` prefix
 - **GraalVM native ready** – all `@Entity` and `@Embedded` classes are registered for reflection at build time; no manual `reflect-config.json` entries needed
 - **Test-friendly** – use `morphium.driver-name=InMemDriver` in your test profile for fast, in-process tests without a running MongoDB
@@ -186,6 +187,66 @@ public class AddressEmbedded {
     @Property(fieldName = "city")   private String city;
 }
 ```
+
+## Declarative transactions
+
+Annotate any CDI bean method with `@MorphiumTransactional` to wrap it in a Morphium transaction.
+On success the transaction is committed; on any exception it is rolled back and the exception is
+re-thrown.
+
+```java
+import de.caluga.morphium.Morphium;
+import de.caluga.morphium.quarkus.transaction.MorphiumTransactional;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+
+@ApplicationScoped
+public class OrderService {
+
+    @Inject Morphium morphium;
+
+    @MorphiumTransactional
+    public void placeOrder(Order order, Payment payment) {
+        morphium.store(order);
+        morphium.store(payment);
+        // auto-commit on success, auto-rollback on exception
+    }
+}
+```
+
+The annotation can also be placed on a class to apply to all business methods.
+
+### Transaction lifecycle events
+
+The interceptor fires CDI events at each transaction phase. Use `@Observes` with the
+`@MorphiumTxPhase` qualifier to react:
+
+```java
+import de.caluga.morphium.quarkus.transaction.MorphiumTransactionEvent;
+import de.caluga.morphium.quarkus.transaction.MorphiumTxPhase;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Observes;
+
+import static de.caluga.morphium.quarkus.transaction.MorphiumTransactionEvent.Phase.*;
+
+@ApplicationScoped
+public class OrderNotifier {
+
+    void afterCommit(@Observes @MorphiumTxPhase(AFTER_COMMIT) MorphiumTransactionEvent e) {
+        // send confirmation email, publish domain event, etc.
+    }
+
+    void afterRollback(@Observes @MorphiumTxPhase(AFTER_ROLLBACK) MorphiumTransactionEvent e) {
+        log.warn("Transaction rolled back", e.getFailure());
+    }
+}
+```
+
+| Phase | Fired when | `getFailure()` |
+|---|---|---|
+| `BEFORE_COMMIT` | After the business method succeeds, before `commitTransaction()` | `null` |
+| `AFTER_COMMIT` | After `commitTransaction()` succeeds | `null` |
+| `AFTER_ROLLBACK` | After `abortTransaction()` due to an exception | The causing exception |
 
 ## Dev Services (automatic MongoDB container)
 
