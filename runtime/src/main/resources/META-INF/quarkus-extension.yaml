@@ -1,8 +1,8 @@
 name: "Morphium MongoDB ORM"
 description: >
   Integrates the Morphium MongoDB ORM into Quarkus via a CDI producer,
-  type-safe configuration, and GraalVM native reflection registration
-  for all @Entity and @Embedded classes.
+  type-safe configuration, declarative @MorphiumTransactional transactions,
+  and GraalVM native reflection registration for all @Entity and @Embedded classes.
 metadata:
   guide: "https://github.com/sboesebeck/morphium"
   categories:

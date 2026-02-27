@@ -11,6 +11,7 @@ import io.quarkus.deployment.annotations.BuildStep;
 import io.quarkus.deployment.builditem.FeatureBuildItem;
 import io.quarkus.deployment.builditem.nativeimage.ReflectiveClassBuildItem;
 import de.caluga.morphium.quarkus.MorphiumProducer;
+import de.caluga.morphium.quarkus.transaction.MorphiumTransactionalInterceptor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,7 +54,9 @@ public class MorphiumProcessor {
         // registered automatically by the SmallRye Config Quarkus extension.
         // MorphiumRecorder is a @Recorder (build-time only) and must not appear here.
         return AdditionalBeanBuildItem.builder()
-            .addBeanClasses(MorphiumProducer.class)
+            .addBeanClasses(
+                MorphiumProducer.class,
+                MorphiumTransactionalInterceptor.class)
             .setUnremovable()
             .build();
     }
