@@ -2,7 +2,10 @@ package de.caluga.morphium.quarkus;
 
 import de.caluga.morphium.Morphium;
 import de.caluga.morphium.MorphiumConfig;
+import de.caluga.morphium.ObjectMapperImpl;
 import de.caluga.morphium.driver.wire.SslHelper;
+import de.caluga.morphium.objectmapping.LocalDateTimeMapper;
+import java.time.LocalDateTime;
 import io.quarkus.runtime.ShutdownEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
@@ -106,6 +109,12 @@ public class MorphiumProducer {
     }
 
     private Morphium buildMorphium() {
+        // Clear the static entity-class cache so ClassGraph re-scans with the current
+        // ClassLoader. Required in Quarkus dev mode where hot-reload replaces the
+        // QuarkusClassLoader – without this, stale class references from the previous
+        // loader cause ObjectMapperImpl to silently skip all @Entity classes.
+        ObjectMapperImpl.clearEntityCache();
+
         MorphiumConfig cfg = new MorphiumConfig();
 
         cfg.setDatabase(config.database());
@@ -142,11 +151,20 @@ public class MorphiumProducer {
         // TLS / X.509 settings
         configureSsl(cfg, config.ssl());
 
-        log.info("Creating Morphium connection to database '{}' (driver: {}, ssl: {}, authMechanism: {})",
+        log.info("Creating Morphium connection to database '{}' (driver: {}, ssl: {}, authMechanism: {}, localDateTimeAsBsonDate: {})",
             config.database(), config.driverName(),
             config.ssl().enabled(),
-            config.ssl().authMechanism().orElse("SCRAM (default)"));
+            config.ssl().authMechanism().orElse("SCRAM (default)"),
+            config.localDateTime().useBsonDate());
 
-        return new Morphium(cfg);
+        Morphium m = new Morphium(cfg);
+
+        // Override the default LocalDateTimeMapper with the configured format.
+        // useBsonDate=true  → ISODate (native MongoDB dates, compatible with Morphia data)
+        // useBsonDate=false → Map{sec, n} (legacy Morphium format)
+        m.getMapper().registerCustomMapperFor(LocalDateTime.class,
+                new LocalDateTimeMapper(config.localDateTime().useBsonDate()));
+
+        return m;
     }
 }

@@ -81,4 +81,7 @@ public interface MorphiumRuntimeConfig {
 
     /** Nested TLS / X.509 configuration. */
     SslConfig ssl();
+
+    /** Nested LocalDateTime serialization configuration. */
+    LocalDateTimeConfig localDateTime();
 }
