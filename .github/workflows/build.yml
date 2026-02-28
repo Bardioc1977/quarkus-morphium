@@ -2,21 +2,16 @@ name: Build
 
 on:
   workflow_dispatch:
-  # push and pull_request triggers temporarily disabled until test suite is stable.
-  # Re-enable by uncommenting the blocks below.
-  # push:
-  #   branches: ["main"]
-  #   paths-ignore:
-  #     - '*.md'
-  #     - 'CHANGELOG.md'
-  #     - 'LICENSE'
-  #     - '.gitignore'
-  # pull_request:
-  #   paths-ignore:
-  #     - '*.md'
-  #     - 'CHANGELOG.md'
-  #     - 'LICENSE'
-  #     - '.gitignore'
+  push:
+    branches: ["main"]
+    paths-ignore:
+      - '*.md'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.editorconfig'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/PULL_REQUEST_TEMPLATE.md'
+      - '.github/CODEOWNERS'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -25,6 +20,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - name: Checkout quarkus-morphium
@@ -36,6 +34,7 @@ jobs:
           distribution: temurin
           java-version: 21
           cache: maven
+          server-id: github
 
       # Morphium is not yet on Maven Central – build from source first.
       - name: Checkout Morphium
@@ -50,6 +49,21 @@ jobs:
 
       - name: Build and test
         run: mvn -B verify
+
+      - name: Deploy Morphium SNAPSHOT to GitHub Packages
+        if: github.ref == 'refs/heads/main'
+        run: >
+          mvn -B deploy -DskipTests
+          -DaltDeploymentRepository=github::https://maven.pkg.github.com/Bardioc1977/quarkus-morphium
+          -f morphium-src/pom.xml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Deploy SNAPSHOT to GitHub Packages
+        if: github.ref == 'refs/heads/main'
+        run: mvn -B deploy -DskipTests
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload test reports
         if: always()

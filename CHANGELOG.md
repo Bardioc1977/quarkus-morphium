@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - LICENSE copyright updated from `Bardioc1977` to `The Quarkiverse Authors`
 
 ### Added
+- GitHub Packages Maven registry for artifact distribution (interim until Maven Central)
+- SNAPSHOT auto-deploy on push to main
 - Apache 2.0 copyright headers in all Java source files
 - POM metadata: `<scm>`, `<licenses>`, `<developers>`, `<url>`, `<issueManagement>`
 - Governance files: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`

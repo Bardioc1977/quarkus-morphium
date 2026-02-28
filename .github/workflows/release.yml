@@ -19,7 +19,8 @@ jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
-      contents: write   # needed to push the tag and create the GitHub Release
+      contents: write
+      packages: write
 
     steps:
       - name: Checkout
@@ -34,6 +35,7 @@ jobs:
           distribution: temurin
           java-version: 21
           cache: maven
+          server-id: github
 
       - name: Configure Git
         run: |
@@ -51,11 +53,24 @@ jobs:
       - name: Install Morphium SNAPSHOT
         run: mvn -B install -DskipTests -f morphium-src/pom.xml
 
+      - name: Deploy Morphium to GitHub Packages
+        run: >
+          mvn -B deploy -DskipTests
+          -DaltDeploymentRepository=github::https://maven.pkg.github.com/Bardioc1977/quarkus-morphium
+          -f morphium-src/pom.xml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Set release version
         run: mvn -B versions:set -DnewVersion=${{ inputs.version }} -DgenerateBackupPoms=false
 
       - name: Build and verify release
         run: mvn -B verify
+
+      - name: Deploy to GitHub Packages
+        run: mvn -B deploy -DskipTests
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Commit release version
         run: |
