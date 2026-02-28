@@ -34,6 +34,6 @@ class MorphiumInjectionTest {
     @Test
     @DisplayName("Morphium uses the configured database name")
     void morphiumUsesConfiguredDatabase() {
-        assertThat(morphium.getConfig().getDatabase()).isEqualTo("it-db");
+        assertThat(morphium.getConfig().connectionSettings().getDatabase()).isEqualTo("it-db");
     }
 }
