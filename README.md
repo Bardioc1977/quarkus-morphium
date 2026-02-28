@@ -38,13 +38,45 @@ Add the extension to your `pom.xml`:
 </dependency>
 ```
 
-> **Note:** Until the extension is published to Maven Central via Quarkiverse, build it locally:
+> **Note:** Until the extension is published to Maven Central via Quarkiverse, use the
+> GitHub Packages registry (see below) or build locally:
 > ```bash
 > git clone https://github.com/Bardioc1977/quarkus-morphium.git
 > cd quarkus-morphium
 > mvn install -DskipTests
 > ```
 > Then use `groupId: de.caluga.morphium`, `artifactId: quarkus-morphium`, `version: 1.0.0-SNAPSHOT`.
+
+### GitHub Packages (interim)
+
+Until the extension is published to Maven Central, release and SNAPSHOT artifacts are
+available from the GitHub Packages Maven registry.
+
+**1. Add the repository to your `pom.xml`:**
+
+```xml
+<repositories>
+  <repository>
+    <id>github-quarkus-morphium</id>
+    <url>https://maven.pkg.github.com/Bardioc1977/quarkus-morphium</url>
+  </repository>
+</repositories>
+```
+
+**2. Configure authentication in `~/.m2/settings.xml`:**
+
+GitHub Packages requires authentication even for public packages. Create a
+[Personal Access Token](https://github.com/settings/tokens) with `read:packages` scope.
+
+```xml
+<servers>
+  <server>
+    <id>github-quarkus-morphium</id>
+    <username>GITHUB_USERNAME</username>
+    <password>GITHUB_PAT_WITH_READ_PACKAGES</password>
+  </server>
+</servers>
+```
 
 ## Configuration
 

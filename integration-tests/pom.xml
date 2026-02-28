@@ -14,6 +14,10 @@
   <artifactId>quarkus-morphium-integration-tests</artifactId>
   <name>Quarkus Morphium Extension – Integration Tests</name>
 
+  <properties>
+    <maven.deploy.skip>true</maven.deploy.skip>
+  </properties>
+
   <dependencies>
     <!-- Extension under test -->
     <dependency>
