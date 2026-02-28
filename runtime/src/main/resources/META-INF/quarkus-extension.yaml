@@ -4,7 +4,7 @@ description: >
   type-safe configuration, declarative @MorphiumTransactional transactions,
   and GraalVM native reflection registration for all @Entity and @Embedded classes.
 metadata:
-  guide: "https://github.com/sboesebeck/morphium"
+  guide: "https://github.com/Bardioc1977/quarkus-morphium/blob/main/docs/modules/ROOT/pages/index.adoc"
   categories:
     - "data"
   status: "preview"
