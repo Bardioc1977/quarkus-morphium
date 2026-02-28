@@ -23,7 +23,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -42,7 +42,7 @@ jobs:
 
       # Morphium is not yet on Maven Central – build from source first.
       - name: Checkout Morphium
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: Bardioc1977/morphium
           ref: master
