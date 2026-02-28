@@ -79,14 +79,12 @@ class MorphiumLocalDateTimeTest {
 
         var found = byCustomer("ldt-components");
         assertThat(found.getCreatedAt())
-                .extracting(
-                        LocalDateTime::getYear,
-                        LocalDateTime::getMonthValue,
-                        LocalDateTime::getDayOfMonth,
-                        LocalDateTime::getHour,
-                        LocalDateTime::getMinute,
-                        LocalDateTime::getSecond)
-                .containsExactly(2024, 3, 14, 15, 9, 26);
+                .hasYear(2024)
+                .hasMonth(java.time.Month.MARCH)
+                .hasDayOfMonth(14)
+                .hasHour(15)
+                .hasMinute(9)
+                .hasSecond(26);
     }
 
     @Test
