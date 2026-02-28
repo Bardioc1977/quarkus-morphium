@@ -33,6 +33,12 @@
     <!-- ClassGraph for @Entity scanning during build.
          Comes transitively from quarkus-morphium (runtime) → morphium. -->
 
+    <!-- Dev UI SPI – for CardPageBuildItem / dev UI integration -->
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-devui-deployment-spi</artifactId>
+    </dependency>
+
     <!-- Testcontainers – only needed at build time for Dev Services.
          Version managed by quarkus-bom; no explicit version required. -->
     <dependency>
