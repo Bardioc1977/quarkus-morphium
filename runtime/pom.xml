@@ -28,6 +28,18 @@
     <dependency>
       <groupId>de.caluga</groupId>
       <artifactId>morphium</artifactId>
+      <exclusions>
+        <!-- Quarkus provides its own SLF4J provider (jboss-logmanager).
+             Logback on the classpath causes "multiple SLF4J providers" warnings. -->
+        <exclusion>
+          <groupId>ch.qos.logback</groupId>
+          <artifactId>logback-classic</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>ch.qos.logback</groupId>
+          <artifactId>logback-core</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
   </dependencies>
 
