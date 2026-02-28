@@ -67,7 +67,7 @@ class MorphiumLocalDateTimeTest {
         assertThat(found.getCreatedAt())
                 .as("createdAt from @PreStore must be preserved in the store")
                 .isNotNull()
-                .isEqualTo(storedAt.withNano(0)); // BSON Date has millisecond precision
+                .isEqualTo(storedAt.truncatedTo(java.time.temporal.ChronoUnit.MILLIS));
     }
 
     @Test
