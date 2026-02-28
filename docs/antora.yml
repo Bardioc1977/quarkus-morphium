@@ -1,0 +1,5 @@
+name: quarkus-morphium
+title: Morphium MongoDB ORM
+version: dev
+nav:
+  - modules/ROOT/nav.adoc
