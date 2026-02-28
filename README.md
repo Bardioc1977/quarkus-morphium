@@ -80,6 +80,10 @@ morphium.driver-name=PooledDriver
 # Query result cache
 morphium.cache.read-cache-enabled=true
 morphium.cache.global-valid-time=60000
+
+# LocalDateTime storage format (default: true = BSON ISODate)
+# Set to false only when reading data written by legacy Morphium (Map format {sec, n})
+morphium.local-date-time.use-bson-date=true
 ```
 
 ### Full configuration reference
@@ -98,6 +102,7 @@ morphium.cache.global-valid-time=60000
 | `morphium.driver-name` | `PooledDriver` | Morphium driver name |
 | `morphium.cache.read-cache-enabled` | `true` | Enable query result cache |
 | `morphium.cache.global-valid-time` | `60000` | Cache TTL in milliseconds |
+| `morphium.local-date-time.use-bson-date` | `true` | Store `LocalDateTime` as BSON `ISODate`; set `false` for legacy Morphium Map format |
 
 ## Usage
 
@@ -300,6 +305,52 @@ class ProductRepositoryTest {
 }
 ```
 
+## LocalDateTime storage format
+
+By default `LocalDateTime` fields are persisted as native BSON `ISODate` values
+(`morphium.local-date-time.use-bson-date=true`).
+This enables native MongoDB date operations (range queries, sorting, `$gt`/`$lt` filters)
+and displays as readable ISO timestamps in mongosh and the Atlas UI.
+
+```properties
+# application.properties
+
+# BSON ISODate – recommended for all new projects and Morphia-compatible data (default)
+morphium.local-date-time.use-bson-date=true
+
+# Legacy Map format {sec: epochSecond, n: nanos} – only for backward compatibility
+morphium.local-date-time.use-bson-date=false
+```
+
+### When to use which format
+
+| | BSON `ISODate` (`true`) | Legacy Map (`false`) |
+|---|---|---|
+| New projects | **recommended** | – |
+| Data written by Morphia | compatible | incompatible |
+| Data written by Morphium ≤ 6.1 | incompatible | compatible |
+| Native date queries (`$gt`, `$lt`) | yes | no |
+| Readable in Atlas UI / mongosh | yes | no |
+
+### Migrating from the legacy Map format
+
+If you have existing data stored in Morphium's `{sec: …, n: …}` Map format and want to
+migrate to BSON `ISODate`, run a one-off migration script **before** switching the flag:
+
+```javascript
+// mongosh – run once per collection that contains LocalDateTime fields
+db.my_collection.find({ created_at: { $type: "object" } }).forEach(doc => {
+  const dt = new Date(doc.created_at.sec * 1000);
+  db.my_collection.updateOne(
+    { _id: doc._id },
+    { $set: { created_at: dt } }
+  );
+});
+```
+
+After the migration, set `morphium.local-date-time.use-bson-date=true` (or remove the
+property, as `true` is the default).
+
 ## Building from source
 
 ```bash
@@ -328,3 +379,4 @@ This project is licensed under the [Apache License 2.0](LICENSE).
 - [Morphium](https://github.com/sboesebeck/morphium) – the underlying MongoDB ORM
 - [Quarkus](https://quarkus.io) – the supersonic, subatomic Java framework
 - [Quarkiverse Hub](https://github.com/quarkiverse) – community Quarkus extensions
+
