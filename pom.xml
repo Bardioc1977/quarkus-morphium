@@ -20,6 +20,7 @@
   <modules>
     <module>runtime</module>
     <module>deployment</module>
+    <module>testing</module>
     <module>integration-tests</module>
   </modules>
 
