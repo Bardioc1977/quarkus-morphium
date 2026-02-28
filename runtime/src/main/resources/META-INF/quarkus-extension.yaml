@@ -4,9 +4,15 @@ description: >
   type-safe configuration, declarative @MorphiumTransactional transactions,
   and GraalVM native reflection registration for all @Entity and @Embedded classes.
 metadata:
+  keywords:
+    - "mongodb"
+    - "morphium"
+    - "orm"
+    - "nosql"
+    - "devservices"
   guide: "https://github.com/Bardioc1977/quarkus-morphium/blob/main/docs/modules/ROOT/pages/index.adoc"
   categories:
     - "data"
   status: "preview"
   config:
-    - "morphium.*"
+    - "quarkus.morphium.*"

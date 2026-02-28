@@ -12,9 +12,9 @@ an actively maintained MongoDB ORM for Java.
 
 - **Zero-boilerplate CDI integration** – inject `Morphium` directly via `@Inject`; the extension manages the lifecycle
 - **Declarative transactions** – annotate methods with `@MorphiumTransactional` for automatic commit/rollback, with CDI events for transaction lifecycle hooks
-- **Type-safe configuration** – all settings live in `application.properties` under the `morphium.*` prefix
+- **Type-safe configuration** – all settings live in `application.properties` under the `quarkus.morphium.*` prefix
 - **GraalVM native ready** – all `@Entity` and `@Embedded` classes are registered for reflection at build time; no manual `reflect-config.json` entries needed
-- **Test-friendly** – use `morphium.driver-name=InMemDriver` in your test profile for fast, in-process tests without a running MongoDB
+- **Test-friendly** – use `quarkus.morphium.driver-name=InMemDriver` in your test profile for fast, in-process tests without a running MongoDB
 - **Clean JDK 25 implementation** – no `sun.*` imports, no `Unsafe` access, no `--add-opens` for internal APIs
 - **Graceful shutdown** – `Morphium.close()` is called automatically when the application stops
 
@@ -52,57 +52,57 @@ Add the following to `src/main/resources/application.properties`:
 
 ```properties
 # Required
-morphium.database=my-database
+quarkus.morphium.database=my-database
 
 # MongoDB hosts (comma-separated host:port pairs, default: localhost:27017)
-morphium.hosts=mongo1:27017,mongo2:27017
+quarkus.morphium.hosts=mongo1:27017,mongo2:27017
 
 # Credentials (optional)
-morphium.username=admin
-morphium.password=secret
-morphium.auth-database=admin
+quarkus.morphium.username=admin
+quarkus.morphium.password=secret
+quarkus.morphium.auth-database=admin
 
 # Connection pool (default: 250)
-morphium.max-connections=100
+quarkus.morphium.max-connections=100
 
-# MongoDB Atlas – overrides morphium.hosts when present
-# morphium.atlas-url=mongodb+srv://user:pass@cluster.mongodb.net/
+# MongoDB Atlas – overrides quarkus.morphium.hosts when present
+# quarkus.morphium.atlas-url=mongodb+srv://user:pass@cluster.mongodb.net/
 
 # Read preference: primary | primaryPreferred | secondary | secondaryPreferred | nearest
-morphium.read-preference=primary
+quarkus.morphium.read-preference=primary
 
 # Automatically create/verify indexes on startup (default: true)
-morphium.create-indexes=true
+quarkus.morphium.create-indexes=true
 
 # Morphium driver: PooledDriver (production) | InMemDriver (tests)
-morphium.driver-name=PooledDriver
+quarkus.morphium.driver-name=PooledDriver
 
 # Query result cache
-morphium.cache.read-cache-enabled=true
-morphium.cache.global-valid-time=60000
+quarkus.morphium.cache.read-cache-enabled=true
+quarkus.morphium.cache.global-valid-time=60000
 
 # LocalDateTime storage format (default: true = BSON ISODate)
 # Set to false only when reading data written by legacy Morphium (Map format {sec, n})
-morphium.local-date-time.use-bson-date=true
+quarkus.morphium.local-date-time.use-bson-date=true
 ```
 
 ### Full configuration reference
 
 | Property | Default | Description |
 |---|---|---|
-| `morphium.database` | *(required)* | MongoDB database name |
-| `morphium.hosts` | `localhost:27017` | Comma-separated `host:port` list |
-| `morphium.username` | – | MongoDB username |
-| `morphium.password` | – | MongoDB password |
-| `morphium.auth-database` | `admin` | Authentication database |
-| `morphium.atlas-url` | – | MongoDB Atlas SRV URL (overrides `hosts`) |
-| `morphium.read-preference` | `primary` | Read preference |
-| `morphium.create-indexes` | `true` | Create indexes on startup |
-| `morphium.max-connections` | `250` | Connection pool size |
-| `morphium.driver-name` | `PooledDriver` | Morphium driver name |
-| `morphium.cache.read-cache-enabled` | `true` | Enable query result cache |
-| `morphium.cache.global-valid-time` | `60000` | Cache TTL in milliseconds |
-| `morphium.local-date-time.use-bson-date` | `true` | Store `LocalDateTime` as BSON `ISODate`; set `false` for legacy Morphium Map format |
+| `quarkus.morphium.database` | *(required)* | MongoDB database name |
+| `quarkus.morphium.hosts` | `localhost:27017` | Comma-separated `host:port` list |
+| `quarkus.morphium.username` | – | MongoDB username |
+| `quarkus.morphium.password` | – | MongoDB password |
+| `quarkus.morphium.auth-database` | `admin` | Authentication database |
+| `quarkus.morphium.atlas-url` | – | MongoDB Atlas SRV URL (overrides `hosts`) |
+| `quarkus.morphium.read-preference` | `primary` | Read preference |
+| `quarkus.morphium.create-indexes` | `true` | Create indexes on startup |
+| `quarkus.morphium.max-connections` | `250` | Connection pool size |
+| `quarkus.morphium.driver-name` | `PooledDriver` | Morphium driver name |
+| `quarkus.morphium.cache.read-cache-enabled` | `true` | Enable query result cache |
+| `quarkus.morphium.cache.global-valid-time` | `60000` | Cache TTL in milliseconds |
+| `quarkus.morphium.local-date-time.use-bson-date` | `true` | Store `LocalDateTime` as BSON `ISODate`; set `false` for legacy Morphium Map format |
 
 ## Usage
 
@@ -256,20 +256,20 @@ public class OrderNotifier {
 ## Dev Services (automatic MongoDB container)
 
 In **dev** (`quarkus:dev`) and **test** mode the extension automatically starts a MongoDB
-container via Testcontainers when `morphium.hosts` is **not** explicitly configured.
+container via Testcontainers when `quarkus.morphium.hosts` is **not** explicitly configured.
 No `application.properties` changes are needed.
 
 | Config key | Default | Description |
 |---|---|---|
 | `quarkus.morphium.devservices.enabled` | `true` | Set to `false` to disable |
 | `quarkus.morphium.devservices.image-name` | `mongo:8` | Docker image to use |
-| `quarkus.morphium.devservices.database-name` | `morphium-dev` | Database injected into `morphium.database` |
+| `quarkus.morphium.devservices.database-name` | `morphium-dev` | Database injected into `quarkus.morphium.database` |
 
 ```properties
 # Disable Dev Services and point to an external MongoDB instead:
 quarkus.morphium.devservices.enabled=false
-morphium.hosts=my-mongo:27017
-morphium.database=mydb
+quarkus.morphium.hosts=my-mongo:27017
+quarkus.morphium.database=mydb
 ```
 
 ## Testing without MongoDB (InMemDriver)
@@ -278,8 +278,8 @@ For **unit tests** that should run without Docker, use Morphium's built-in `InMe
 
 ```properties
 # src/test/resources/application.properties
-%test.morphium.driver-name=InMemDriver
-%test.morphium.database=test-db
+%test.quarkus.morphium.driver-name=InMemDriver
+%test.quarkus.morphium.database=test-db
 ```
 
 ```java
@@ -308,7 +308,7 @@ class ProductRepositoryTest {
 ## LocalDateTime storage format
 
 By default `LocalDateTime` fields are persisted as native BSON `ISODate` values
-(`morphium.local-date-time.use-bson-date=true`).
+(`quarkus.morphium.local-date-time.use-bson-date=true`).
 This enables native MongoDB date operations (range queries, sorting, `$gt`/`$lt` filters)
 and displays as readable ISO timestamps in mongosh and the Atlas UI.
 
@@ -316,10 +316,10 @@ and displays as readable ISO timestamps in mongosh and the Atlas UI.
 # application.properties
 
 # BSON ISODate – recommended for all new projects and Morphia-compatible data (default)
-morphium.local-date-time.use-bson-date=true
+quarkus.morphium.local-date-time.use-bson-date=true
 
 # Legacy Map format {sec: epochSecond, n: nanos} – only for backward compatibility
-morphium.local-date-time.use-bson-date=false
+quarkus.morphium.local-date-time.use-bson-date=false
 ```
 
 ### When to use which format
@@ -348,7 +348,7 @@ db.my_collection.find({ created_at: { $type: "object" } }).forEach(doc => {
 });
 ```
 
-After the migration, set `morphium.local-date-time.use-bson-date=true` (or remove the
+After the migration, set `quarkus.morphium.local-date-time.use-bson-date=true` (or remove the
 property, as `true` is the default).
 
 ## Building from source
@@ -366,9 +366,9 @@ mvn verify
 
 ## Contributing
 
-Contributions are welcome. Please open an issue before submitting a pull request for significant changes.
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-This project follows the [Contributor Covenant Code of Conduct](https://www.contributor-covenant.org/version/2/1/code_of_conduct/).
+This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 

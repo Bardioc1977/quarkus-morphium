@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question
+    url: https://github.com/Bardioc1977/quarkus-morphium/discussions
+    about: Use Discussions for questions and general help

@@ -9,7 +9,7 @@ It provides:
 
 * **Zero-boilerplate injection** – inject `Morphium` directly via `@Inject`; the extension manages the full lifecycle
 * **Declarative transactions** – `@MorphiumTransactional` for automatic commit / rollback with CDI lifecycle events
-* **Type-safe configuration** – all settings live under the `morphium.*` prefix in `application.properties`
+* **Type-safe configuration** – all settings live under the `quarkus.morphium.*` prefix in `application.properties`
 * **Dev Services** – a MongoDB container is started automatically in dev and test mode; no manual Docker setup needed
 * **GraalVM native ready** – all `@Entity` and `@Embedded` classes are registered for reflection at build time
 * **Fast tests** – use the `InMemDriver` profile from `quarkus-morphium-testing` for instant, container-free tests
@@ -38,7 +38,7 @@ Minimal `src/main/resources/application.properties`:
 
 [source,properties]
 ----
-morphium.database=my-database
+quarkus.morphium.database=my-database
 ----
 
 All other properties have sensible defaults (see <<config-reference,Configuration Reference>> below).
@@ -48,38 +48,38 @@ A fuller example:
 [source,properties]
 ----
 # Required
-morphium.database=my-database
+quarkus.morphium.database=my-database
 
 # MongoDB hosts – comma-separated host:port pairs (default: localhost:27017)
-morphium.hosts=mongo1:27017,mongo2:27017
+quarkus.morphium.hosts=mongo1:27017,mongo2:27017
 
 # Credentials (optional)
-morphium.username=admin
-morphium.password=secret
-morphium.auth-database=admin
+quarkus.morphium.username=admin
+quarkus.morphium.password=secret
+quarkus.morphium.auth-database=admin
 
 # Connection pool size (default: 250)
-morphium.max-connections=100
+quarkus.morphium.max-connections=100
 
-# MongoDB Atlas SRV URL – overrides morphium.hosts when set
-# morphium.atlas-url=mongodb+srv://user:pass@cluster.mongodb.net/
+# MongoDB Atlas SRV URL – overrides quarkus.morphium.hosts when set
+# quarkus.morphium.atlas-url=mongodb+srv://user:pass@cluster.mongodb.net/
 
 # Read preference: primary | primaryPreferred | secondary | secondaryPreferred | nearest
-morphium.read-preference=primary
+quarkus.morphium.read-preference=primary
 
 # Create / verify indexes on startup (default: true)
-morphium.create-indexes=true
+quarkus.morphium.create-indexes=true
 
 # Driver: PooledDriver (production) | InMemDriver (tests, no MongoDB required)
-morphium.driver-name=PooledDriver
+quarkus.morphium.driver-name=PooledDriver
 
 # Query result cache
-morphium.cache.read-cache-enabled=true
-morphium.cache.global-valid-time=60000
+quarkus.morphium.cache.read-cache-enabled=true
+quarkus.morphium.cache.global-valid-time=60000
 
 # LocalDateTime storage format (default: true = BSON ISODate)
 # Set to false only for backward compatibility with data written by Morphium <= 6.1
-morphium.local-date-time.use-bson-date=true
+quarkus.morphium.local-date-time.use-bson-date=true
 ----
 
 [#usage]
@@ -253,7 +253,7 @@ public class AuditObserver {
 == Dev Services
 
 In **dev** (`quarkus:dev`) and **test** mode the extension automatically starts a MongoDB
-container when `morphium.hosts` is not explicitly configured.
+container when `quarkus.morphium.hosts` is not explicitly configured.
 No additional setup is needed.
 
 .Dev Services configuration
@@ -270,7 +270,7 @@ No additional setup is needed.
 
 | `quarkus.morphium.devservices.database-name`
 | `morphium-dev`
-| Database name injected into `morphium.database`
+| Database name injected into `quarkus.morphium.database`
 |===
 
 To disable Dev Services and point to an existing MongoDB:
@@ -278,8 +278,8 @@ To disable Dev Services and point to an existing MongoDB:
 [source,properties]
 ----
 quarkus.morphium.devservices.enabled=false
-morphium.hosts=my-mongo:27017
-morphium.database=mydb
+quarkus.morphium.hosts=my-mongo:27017
+quarkus.morphium.database=mydb
 ----
 
 For testing strategies (Dev Services vs. in-memory driver), see xref:testing.adoc[Testing].
@@ -293,11 +293,11 @@ native MongoDB date operations and a human-readable representation in mongosh an
 [source,properties]
 ----
 # Default – BSON ISODate (recommended for all new projects)
-morphium.local-date-time.use-bson-date=true
+quarkus.morphium.local-date-time.use-bson-date=true
 
 # Legacy Map format {sec: epochSecond, n: nanos}
 # Only needed for backward compatibility with data written by Morphium <= 6.1
-morphium.local-date-time.use-bson-date=false
+quarkus.morphium.local-date-time.use-bson-date=false
 ----
 
 .Format comparison
@@ -328,55 +328,55 @@ morphium.local-date-time.use-bson-date=false
 |===
 | Property | Default | Description
 
-| `morphium.database`
+| `quarkus.morphium.database`
 | _(required)_
 | MongoDB database name
 
-| `morphium.hosts`
+| `quarkus.morphium.hosts`
 | `localhost:27017`
 | Comma-separated `host:port` list
 
-| `morphium.username`
+| `quarkus.morphium.username`
 | –
 | MongoDB username
 
-| `morphium.password`
+| `quarkus.morphium.password`
 | –
 | MongoDB password
 
-| `morphium.auth-database`
+| `quarkus.morphium.auth-database`
 | `admin`
 | Authentication database
 
-| `morphium.atlas-url`
+| `quarkus.morphium.atlas-url`
 | –
-| MongoDB Atlas SRV URL; overrides `morphium.hosts`
+| MongoDB Atlas SRV URL; overrides `quarkus.morphium.hosts`
 
-| `morphium.read-preference`
+| `quarkus.morphium.read-preference`
 | `primary`
 | Read preference (`primary`, `primaryPreferred`, `secondary`, `secondaryPreferred`, `nearest`)
 
-| `morphium.create-indexes`
+| `quarkus.morphium.create-indexes`
 | `true`
 | Create / verify indexes on startup
 
-| `morphium.max-connections`
+| `quarkus.morphium.max-connections`
 | `250`
 | Connection pool size
 
-| `morphium.driver-name`
+| `quarkus.morphium.driver-name`
 | `PooledDriver`
 | Morphium driver (`PooledDriver` or `InMemDriver`)
 
-| `morphium.local-date-time.use-bson-date`
+| `quarkus.morphium.local-date-time.use-bson-date`
 | `true`
 | Store `LocalDateTime` as BSON `ISODate`; `false` for legacy Morphium Map format
 
-| `morphium.cache.read-cache-enabled`
+| `quarkus.morphium.cache.read-cache-enabled`
 | `true`
 | Enable query result cache
 
-| `morphium.cache.global-valid-time`
+| `quarkus.morphium.cache.global-valid-time`
 | `60000`
 | Cache TTL in milliseconds
 

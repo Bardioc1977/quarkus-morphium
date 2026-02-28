@@ -1,3 +1,18 @@
+/*
+ * Copyright 2025 The Quarkiverse Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package de.caluga.morphium.quarkus.deployment;
 
 import io.quarkus.deployment.IsDevServicesSupportedByLaunchMode;
@@ -15,7 +30,7 @@ import java.util.Optional;
 
 /**
  * Quarkus build-time processor that automatically starts a MongoDB container
- * in dev and test mode when no explicit {@code morphium.hosts} is configured.
+ * in dev and test mode when no explicit {@code quarkus.morphium.hosts} is configured.
  *
  * <p>The container is reused across live reloads (static field) and stopped
  * automatically when Quarkus shuts down (JVM shutdown hook registered on first start).
@@ -23,7 +38,7 @@ import java.util.Optional;
  * <p>Dev Services are skipped when:
  * <ul>
  *   <li>{@code quarkus.morphium.devservices.enabled=false}</li>
- *   <li>{@code morphium.hosts} is explicitly set in {@code application.properties}</li>
+ *   <li>{@code quarkus.morphium.hosts} is explicitly set in {@code application.properties}</li>
  *   <li>The application runs in normal (production) mode ({@code @BuildStep(onlyIfNot = IsNormal.class)})</li>
  * </ul>
  */
@@ -52,11 +67,11 @@ public class MorphiumDevServicesProcessor {
             return null;
         }
 
-        // If morphium.hosts is explicitly set in application config, respect it
+        // If quarkus.morphium.hosts is explicitly set in application config, respect it
         Optional<String> explicitHosts =
-                ConfigProvider.getConfig().getOptionalValue("morphium.hosts", String.class);
+                ConfigProvider.getConfig().getOptionalValue("quarkus.morphium.hosts", String.class);
         if (explicitHosts.isPresent()) {
-            log.debug("morphium.hosts={} – skipping Dev Services", explicitHosts.get());
+            log.debug("quarkus.morphium.hosts={} – skipping Dev Services", explicitHosts.get());
             stopContainerIfRunning();
             return null;
         }
@@ -84,7 +99,7 @@ public class MorphiumDevServicesProcessor {
         @SuppressWarnings("resource")   // lifecycle managed via shutdown hook below
         GenericContainer<?> container = new GenericContainer<>(DockerImageName.parse(image))
                 .withExposedPorts(MONGO_PORT)
-                .waitingFor(Wait.forLogMessage(".*Waiting for connections.*\\n", 1));
+                .waitingFor(Wait.forLogMessage(".*Waiting for connections.*\n", 1));
 
         try {
             container.start();
@@ -95,7 +110,7 @@ public class MorphiumDevServicesProcessor {
                 e.addSuppressed(suppressed);
             }
             log.warn("Morphium Dev Services: failed to start MongoDB container – "
-                    + "falling back to configured morphium.hosts (if any). Cause: {}", e.getMessage());
+                    + "falling back to configured quarkus.morphium.hosts (if any). Cause: {}", e.getMessage());
             return null;
         }
         devContainer = container;
@@ -120,8 +135,8 @@ public class MorphiumDevServicesProcessor {
                 .feature("morphium")
                 .containerId(container.getContainerId())
                 .config(Map.of(
-                        "morphium.hosts",    "localhost:" + port,
-                        "morphium.database", config.databaseName()
+                        "quarkus.morphium.hosts",    "localhost:" + port,
+                        "quarkus.morphium.database", config.databaseName()
                 ))
                 .build();
     }

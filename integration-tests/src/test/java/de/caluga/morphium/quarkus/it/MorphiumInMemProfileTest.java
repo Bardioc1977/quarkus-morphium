@@ -1,3 +1,18 @@
+/*
+ * Copyright 2025 The Quarkiverse Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package de.caluga.morphium.quarkus.it;
 
 import de.caluga.morphium.Morphium;
@@ -28,18 +43,18 @@ class MorphiumInMemProfileTest {
     Morphium morphium;
 
     @Test
-    @DisplayName("profile overrides morphium.database to 'inmem-test'")
+    @DisplayName("profile overrides quarkus.morphium.database to 'inmem-test'")
     void profile_overridesDatabase() {
         String db = ConfigProvider.getConfig()
-                .getValue("morphium.database", String.class);
+                .getValue("quarkus.morphium.database", String.class);
         assertThat(db).isEqualTo("inmem-test");
     }
 
     @Test
-    @DisplayName("profile keeps morphium.driver-name as InMemDriver")
+    @DisplayName("profile keeps quarkus.morphium.driver-name as InMemDriver")
     void profile_driverIsInMem() {
         String driver = ConfigProvider.getConfig()
-                .getValue("morphium.driver-name", String.class);
+                .getValue("quarkus.morphium.driver-name", String.class);
         assertThat(driver).isEqualTo("InMemDriver");
     }
 

@@ -1,3 +1,18 @@
+/*
+ * Copyright 2025 The Quarkiverse Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package de.caluga.morphium.quarkus.deployment;
 
 import io.quarkus.deployment.IsDevelopment;
@@ -36,8 +51,8 @@ public class MorphiumDevUIProcessor {
         CardPageBuildItem card = new CardPageBuildItem();
 
         if (devConfig != null) {
-            String hosts = devConfig.getOrDefault("morphium.hosts", "n/a");
-            String database = devConfig.getOrDefault("morphium.database", "n/a");
+            String hosts = devConfig.getOrDefault("quarkus.morphium.hosts", "n/a");
+            String database = devConfig.getOrDefault("quarkus.morphium.database", "n/a");
             card.addBuildTimeData("hosts", hosts);
             card.addBuildTimeData("database", database);
             card.addBuildTimeData("containerId",
@@ -47,7 +62,7 @@ public class MorphiumDevUIProcessor {
             card.addBuildTimeData("hosts", "n/a");
             card.addBuildTimeData("database", "n/a");
             card.addBuildTimeData("containerId", "n/a");
-            card.addBuildTimeData("status", "Not started (Dev Services disabled or morphium.hosts set)");
+            card.addBuildTimeData("status", "Not started (Dev Services disabled or quarkus.morphium.hosts set)");
         }
 
         card.addPage(Page.tableDataPageBuilder("MongoDB Connection")

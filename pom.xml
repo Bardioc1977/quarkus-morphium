@@ -16,6 +16,33 @@
     Provides @ApplicationScoped Morphium producer, type-safe @ConfigMapping,
     and GraalVM native reflection registration for all @Entity classes.
   </description>
+  <url>https://github.com/Bardioc1977/quarkus-morphium</url>
+
+  <licenses>
+    <license>
+      <name>Apache License, Version 2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+
+  <scm>
+    <connection>scm:git:https://github.com/Bardioc1977/quarkus-morphium.git</connection>
+    <developerConnection>scm:git:git@github.com:Bardioc1977/quarkus-morphium.git</developerConnection>
+    <url>https://github.com/Bardioc1977/quarkus-morphium</url>
+  </scm>
+
+  <issueManagement>
+    <system>GitHub Issues</system>
+    <url>https://github.com/Bardioc1977/quarkus-morphium/issues</url>
+  </issueManagement>
+
+  <developers>
+    <developer>
+      <id>Bardioc1977</id>
+      <url>https://github.com/Bardioc1977</url>
+    </developer>
+  </developers>
 
   <modules>
     <module>runtime</module>
