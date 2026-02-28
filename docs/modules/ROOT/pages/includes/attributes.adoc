@@ -1,0 +1,8 @@
+:quarkus-morphium-version: 1.0.0-SNAPSHOT
+:quarkus-version: 3.32.1
+:morphium-version: 6.2.0-SNAPSHOT
+:extension-status: preview
+
+:github-base-url: https://github.com/Bardioc1977/quarkus-morphium
+:morphium-github-url: https://github.com/sboesebeck/morphium
+:quarkus-guides-url: https://quarkus.io/guides
