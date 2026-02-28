@@ -1,0 +1,2 @@
+* xref:index.adoc[Getting Started]
+* xref:testing.adoc[Testing]
