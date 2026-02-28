@@ -1,6 +1,6 @@
 package de.caluga.morphium.quarkus.deployment;
 
-import io.quarkus.deployment.IsNormal;
+import io.quarkus.deployment.IsDevServicesSupportedByLaunchMode;
 import io.quarkus.deployment.annotations.BuildStep;
 import io.quarkus.deployment.builditem.DevServicesResultBuildItem;
 import org.eclipse.microprofile.config.ConfigProvider;
@@ -43,7 +43,7 @@ public class MorphiumDevServicesProcessor {
     // Build step
     // ------------------------------------------------------------------
 
-    @BuildStep(onlyIfNot = IsNormal.class)
+    @BuildStep(onlyIf = IsDevServicesSupportedByLaunchMode.class)
     public DevServicesResultBuildItem startDevServices(MorphiumDevServicesBuildTimeConfig config) {
 
         if (!config.enabled()) {
@@ -116,13 +116,14 @@ public class MorphiumDevServicesProcessor {
             GenericContainer<?> container, MorphiumDevServicesBuildTimeConfig config) {
 
         int port = container.getMappedPort(MONGO_PORT);
-        return new DevServicesResultBuildItem(
-                "morphium",
-                container.getContainerId(),
-                Map.of(
+        return DevServicesResultBuildItem.discovered()
+                .feature("morphium")
+                .containerId(container.getContainerId())
+                .config(Map.of(
                         "morphium.hosts",    "localhost:" + port,
                         "morphium.database", config.databaseName()
-                ));
+                ))
+                .build();
     }
 
     private static void stopContainerIfRunning() {

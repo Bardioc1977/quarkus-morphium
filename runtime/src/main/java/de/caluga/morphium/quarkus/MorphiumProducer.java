@@ -101,10 +101,10 @@ public class MorphiumProducer {
         // Explicit X.509 username (subject DN override)
         ssl.x509Username().ifPresent(dn -> {
             log.debug("Using explicit X.509 username (subject DN): {}", dn);
-            cfg.setMongoLogin(dn);
+            cfg.authSettings().setMongoLogin(dn);
             // No password for X.509 – set empty to avoid SCRAM credential check
-            cfg.setMongoPassword("");
-            cfg.setMongoAuthDb("$external");
+            cfg.authSettings().setMongoPassword("");
+            cfg.authSettings().setMongoAuthDb("$external");
         });
     }
 
@@ -117,36 +117,38 @@ public class MorphiumProducer {
 
         MorphiumConfig cfg = new MorphiumConfig();
 
-        cfg.setDatabase(config.database());
-        cfg.setDriverName(config.driverName());
-        cfg.setMaxConnections(config.maxConnections());
-        cfg.setDefaultReadPreferenceType(config.readPreference());
+        cfg.connectionSettings().setDatabase(config.database());
+        cfg.driverSettings().setDriverName(config.driverName());
+        cfg.connectionSettings().setMaxConnections(config.maxConnections());
+        cfg.driverSettings().setDefaultReadPreferenceType(config.readPreference());
         if (config.createIndexes()) {
             cfg.setAutoIndexAndCappedCreationOnWrite(true);
         }
 
         // Host configuration
         if (config.atlasUrl().isPresent()) {
-            cfg.addHostToSeed(config.atlasUrl().get());
+            // Use ClusterSettings.setAtlasUrl() for mongodb+srv:// connection strings.
+            // Morphium resolves the SRV record automatically in initializeAndConnect().
+            cfg.clusterSettings().setAtlasUrl(config.atlasUrl().get());
         } else {
             for (String host : config.hosts()) {
                 String trimmed = host.trim();
                 if (!trimmed.isEmpty()) {
-                    cfg.addHostToSeed(trimmed);
+                    cfg.clusterSettings().addHostToSeed(trimmed);
                 }
             }
         }
 
         // Credentials
         if (config.username().isPresent() && config.password().isPresent()) {
-            cfg.setMongoLogin(config.username().get());
-            cfg.setMongoPassword(config.password().get());
-            cfg.setMongoAuthDb(config.authDatabase());
+            cfg.authSettings().setMongoLogin(config.username().get());
+            cfg.authSettings().setMongoPassword(config.password().get());
+            cfg.authSettings().setMongoAuthDb(config.authDatabase());
         }
 
         // Cache settings
-        cfg.setGlobalCacheValidTime((int) config.cache().globalValidTime());
-        cfg.setReadCacheEnabled(config.cache().readCacheEnabled());
+        cfg.cacheSettings().setGlobalCacheValidTime((int) config.cache().globalValidTime());
+        cfg.cacheSettings().setReadCacheEnabled(config.cache().readCacheEnabled());
 
         // TLS / X.509 settings
         configureSsl(cfg, config.ssl());
