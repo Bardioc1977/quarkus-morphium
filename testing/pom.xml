@@ -6,7 +6,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
-    <groupId>de.caluga.morphium</groupId>
+    <groupId>io.quarkiverse.morphium</groupId>
     <artifactId>quarkus-morphium-parent</artifactId>
     <version>1.0.0-SNAPSHOT</version>
   </parent>
@@ -21,7 +21,7 @@
 
   <dependencies>
     <dependency>
-      <groupId>de.caluga.morphium</groupId>
+      <groupId>io.quarkiverse.morphium</groupId>
       <artifactId>quarkus-morphium</artifactId>
       <version>${project.version}</version>
     </dependency>

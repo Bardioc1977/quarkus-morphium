@@ -22,7 +22,7 @@ Add the extension to your `pom.xml`:
 [source,xml,subs=attributes+]
 ----
 <dependency>
-    <groupId>de.caluga.morphium</groupId>
+    <groupId>io.quarkiverse.morphium</groupId>
     <artifactId>quarkus-morphium</artifactId>
     <version>{quarkus-morphium-version}</version>
 </dependency>

@@ -75,7 +75,7 @@ Add `quarkus-morphium-testing` as a **test** dependency:
 [source,xml,subs=attributes+]
 ----
 <dependency>
-    <groupId>de.caluga.morphium</groupId>
+    <groupId>io.quarkiverse.morphium</groupId>
     <artifactId>quarkus-morphium-testing</artifactId>
     <version>{quarkus-morphium-version}</version>
     <scope>test</scope>
