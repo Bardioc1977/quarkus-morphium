@@ -33,6 +33,14 @@
     <!-- ClassGraph for @Entity scanning during build.
          Comes transitively from quarkus-morphium (runtime) → morphium. -->
 
+    <!-- Dev Services infrastructure – converts DevServicesResultBuildItem
+         into DevServiceDescriptionBuildItem so the container appears
+         in the Dev UI "Dev Services" panel. -->
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-devservices-deployment</artifactId>
+    </dependency>
+
     <!-- Dev UI SPI – for CardPageBuildItem / dev UI integration -->
     <dependency>
       <groupId>io.quarkus</groupId>
