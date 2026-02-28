@@ -45,7 +45,7 @@ Add the extension to your `pom.xml`:
 > cd quarkus-morphium
 > mvn install -DskipTests
 > ```
-> Then use `groupId: de.caluga.morphium`, `artifactId: quarkus-morphium`, `version: 1.0.0-SNAPSHOT`.
+> Then use `groupId: io.quarkiverse.morphium`, `artifactId: quarkus-morphium`, `version: 1.0.0-SNAPSHOT`.
 
 ### GitHub Packages (interim)
 
