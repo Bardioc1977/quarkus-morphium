@@ -142,7 +142,6 @@ The `InMemDriver` does not support:
 
 * Aggregation pipelines with complex stages (`$lookup`, `$facet`)
 * Geospatial queries
-* X.509 / SCRAM authentication commands (logged as WARN, safely ignored)
 ====
 
 [#mixing]
@@ -299,7 +298,4 @@ link:{showcase-github-url}[quarkus-morphium-showcase] project.
 | no
 | Use Dev Services
 
-| X.509 / SCRAM auth commands
-| no
-| Logged as WARN, safely ignored
 |===
