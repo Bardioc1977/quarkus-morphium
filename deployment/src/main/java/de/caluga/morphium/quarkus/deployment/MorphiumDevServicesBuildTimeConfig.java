@@ -57,4 +57,19 @@ public interface MorphiumDevServicesBuildTimeConfig {
      */
     @WithDefault("morphium-dev")
     String databaseName();
+
+    /**
+     * Whether to start MongoDB as a single-node replica set instead of a standalone instance.
+     *
+     * <p>A single-node replica set enables multi-document transactions, which are not
+     * available on a standalone MongoDB. Enable this when your application uses
+     * {@code @MorphiumTransactional} or calls Morphium transaction APIs directly.
+     *
+     * <p>Example:
+     * <pre>{@code
+     * quarkus.morphium.devservices.replica-set=true
+     * }</pre>
+     */
+    @WithDefault("false")
+    boolean replicaSet();
 }

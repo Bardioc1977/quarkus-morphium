@@ -22,6 +22,7 @@ import org.eclipse.microprofile.config.ConfigProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.utility.DockerImageName;
 
@@ -76,8 +77,12 @@ public class MorphiumDevServicesProcessor {
             return null;
         }
 
-        // Reuse a container that is still running (live reload scenario)
-        if (devContainer != null && devContainer.isRunning()) {
+        // Reuse a container that is still running (live reload scenario),
+        // but only when the replica-set mode matches what is currently configured.
+        // If the mode changed (e.g. standalone → replica-set), restart the container.
+        boolean wantsReplicaSet = config.replicaSet();
+        boolean currentIsReplicaSet = devContainer instanceof MongoDBContainer;
+        if (devContainer != null && devContainer.isRunning() && wantsReplicaSet == currentIsReplicaSet) {
             log.debug("Reusing existing Morphium Dev Services container ({})",
                     devContainer.getContainerId());
             return buildResult(devContainer, config);
@@ -94,12 +99,21 @@ public class MorphiumDevServicesProcessor {
             MorphiumDevServicesBuildTimeConfig config) {
 
         String image = config.imageName();
-        log.info("Morphium Dev Services: starting MongoDB container from image '{}'", image);
 
         @SuppressWarnings("resource")   // lifecycle managed via shutdown hook below
-        GenericContainer<?> container = new GenericContainer<>(DockerImageName.parse(image))
-                .withExposedPorts(MONGO_PORT)
-                .waitingFor(Wait.forLogMessage(".*Waiting for connections.*\n", 1));
+        final GenericContainer<?> container;
+
+        if (config.replicaSet()) {
+            log.info("Morphium Dev Services: starting MongoDB single-node replica set from image '{}' "
+                    + "(transactions enabled)", image);
+            // MongoDBContainer handles --replSet, rs.initiate() and PRIMARY wait automatically.
+            container = new MongoDBContainer(DockerImageName.parse(image));
+        } else {
+            log.info("Morphium Dev Services: starting MongoDB standalone container from image '{}'", image);
+            container = new GenericContainer<>(DockerImageName.parse(image))
+                    .withExposedPorts(MONGO_PORT)
+                    .waitingFor(Wait.forLogMessage(".*Waiting for connections.*\n", 1));
+        }
 
         try {
             container.start();
@@ -116,7 +130,8 @@ public class MorphiumDevServicesProcessor {
         devContainer = container;
 
         int mappedPort = container.getMappedPort(MONGO_PORT);
-        log.info("Morphium Dev Services: MongoDB ready at localhost:{} (container {})",
+        log.info("Morphium Dev Services: MongoDB {} ready at localhost:{} (container {})",
+                config.replicaSet() ? "replica set" : "standalone",
                 mappedPort, container.getContainerId());
 
         // Ensure the container is stopped on JVM exit (test runner, dev mode Ctrl-C, etc.)

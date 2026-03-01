@@ -22,6 +22,7 @@ import io.quarkus.deployment.builditem.DevServicesResultBuildItem;
 import io.quarkus.devui.spi.page.CardPageBuildItem;
 import io.quarkus.devui.spi.page.Page;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -35,6 +36,7 @@ public class MorphiumDevUIProcessor {
 
     @BuildStep(onlyIf = IsDevelopment.class)
     void createCard(List<DevServicesResultBuildItem> devServicesResults,
+                    MorphiumDevServicesBuildTimeConfig devServicesConfig,
                     BuildProducer<CardPageBuildItem> cardProducer) {
 
         // Find our dev services result by feature name
@@ -50,24 +52,28 @@ public class MorphiumDevUIProcessor {
 
         CardPageBuildItem card = new CardPageBuildItem();
 
+        List<Map<String, String>> rows = new ArrayList<>();
         if (devConfig != null) {
-            String hosts = devConfig.getOrDefault("quarkus.morphium.hosts", "n/a");
-            String database = devConfig.getOrDefault("quarkus.morphium.database", "n/a");
-            card.addBuildTimeData("hosts", hosts);
-            card.addBuildTimeData("database", database);
-            card.addBuildTimeData("containerId",
-                    containerId != null ? containerId.substring(0, Math.min(12, containerId.length())) : "n/a");
-            card.addBuildTimeData("status", "Running");
+            String shortId = containerId != null
+                    ? containerId.substring(0, Math.min(12, containerId.length()))
+                    : "n/a";
+            String mode = devServicesConfig.replicaSet()
+                    ? "Replica Set (transactions enabled)"
+                    : "Standalone";
+            rows.add(Map.of("Property", "Hosts",        "Value", devConfig.getOrDefault("quarkus.morphium.hosts", "n/a")));
+            rows.add(Map.of("Property", "Database",     "Value", devConfig.getOrDefault("quarkus.morphium.database", "n/a")));
+            rows.add(Map.of("Property", "Mode",         "Value", mode));
+            rows.add(Map.of("Property", "Container ID", "Value", shortId));
+            rows.add(Map.of("Property", "Status",       "Value", "Running"));
         } else {
-            card.addBuildTimeData("hosts", "n/a");
-            card.addBuildTimeData("database", "n/a");
-            card.addBuildTimeData("containerId", "n/a");
-            card.addBuildTimeData("status", "Not started (Dev Services disabled or quarkus.morphium.hosts set)");
+            rows.add(Map.of("Property", "Status", "Value",
+                    "Not started (Dev Services disabled or quarkus.morphium.hosts set)"));
         }
+        card.addBuildTimeData("connectionInfo", rows);
 
         card.addPage(Page.tableDataPageBuilder("MongoDB Connection")
                 .icon("font-awesome-solid:database")
-                .buildTimeDataKey("hosts"));
+                .buildTimeDataKey("connectionInfo"));
 
         cardProducer.produce(card);
     }
