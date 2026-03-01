@@ -88,6 +88,12 @@ public class MorphiumDevServicesProcessor {
             return buildResult(devContainer, config);
         }
 
+        // Mode changed (standalone ↔ replica-set): stop old container before starting new one.
+        if (devContainer != null && devContainer.isRunning()) {
+            log.info("Morphium Dev Services: replica-set mode changed – stopping old container");
+            stopContainerIfRunning();
+        }
+
         return startNewContainer(config);
     }
 
