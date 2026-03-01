@@ -30,10 +30,22 @@ jobs:
       - name: Build Antora site
         run: npx antora@3.1.14 antora-playbook.yml
 
+      - name: Create root redirect
+        run: |
+          cat > build/site/quarkus-morphium/index.html <<'REDIRECT'
+          <!DOCTYPE html>
+          <meta charset="utf-8">
+          <script>location="dev/index.html"</script>
+          <meta http-equiv="refresh" content="0; url=dev/index.html">
+          <meta name="robots" content="noindex">
+          <title>Redirect</title>
+          <p><a href="dev/index.html">Redirect</a></p>
+          REDIRECT
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: build/site
+          path: build/site/quarkus-morphium
 
   deploy:
     if: github.ref == 'refs/heads/main'
