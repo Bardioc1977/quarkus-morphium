@@ -30,6 +30,11 @@
       <groupId>io.quarkus</groupId>
       <artifactId>quarkus-arc-deployment</artifactId>
     </dependency>
+    <!-- Health check build-time support -->
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-smallrye-health-deployment</artifactId>
+    </dependency>
     <!-- ClassGraph for @Entity scanning during build.
          Comes transitively from quarkus-morphium (runtime) → morphium. -->
 

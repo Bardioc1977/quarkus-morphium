@@ -24,6 +24,11 @@
       <groupId>io.quarkus</groupId>
       <artifactId>quarkus-core</artifactId>
     </dependency>
+    <!-- MicroProfile Health API (provided by quarkus-smallrye-health) -->
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-smallrye-health</artifactId>
+    </dependency>
     <!-- The Morphium ORM library -->
     <dependency>
       <groupId>de.caluga</groupId>
