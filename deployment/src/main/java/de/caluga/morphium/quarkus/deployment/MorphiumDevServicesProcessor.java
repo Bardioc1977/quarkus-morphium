@@ -54,6 +54,7 @@ public class MorphiumDevServicesProcessor {
      * visibility after a classloader reload.
      */
     private static volatile GenericContainer<?> devContainer;
+    private static volatile boolean shutdownHookRegistered = false;
 
     // ------------------------------------------------------------------
     // Build step
@@ -140,10 +141,14 @@ public class MorphiumDevServicesProcessor {
                 config.replicaSet() ? "replica set" : "standalone",
                 mappedPort, container.getContainerId());
 
-        // Ensure the container is stopped on JVM exit (test runner, dev mode Ctrl-C, etc.)
-        Runtime.getRuntime().addShutdownHook(
-                new Thread(MorphiumDevServicesProcessor::stopContainerIfRunning,
-                        "morphium-devservices-shutdown"));
+        // Ensure the container is stopped on JVM exit (test runner, dev mode Ctrl-C, etc.).
+        // Guard against duplicate hooks accumulating across live-reload restarts.
+        if (!shutdownHookRegistered) {
+            Runtime.getRuntime().addShutdownHook(
+                    new Thread(MorphiumDevServicesProcessor::stopContainerIfRunning,
+                            "morphium-devservices-shutdown"));
+            shutdownHookRegistered = true;
+        }
 
         return buildResult(container, config);
     }
