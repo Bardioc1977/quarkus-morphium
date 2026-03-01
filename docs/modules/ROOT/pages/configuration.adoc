@@ -119,7 +119,7 @@ See xref:advanced.adoc#ssl-tls[Advanced Topics: SSL/TLS] for usage examples.
 
 | `quarkus.morphium.ssl.keystore-path`
 | –
-| Path to the keystore file (JKS or PKCS12) containing the client certificate for X.509 / mutual TLS.
+| Path to the keystore file (JKS or PKCS12) containing the client certificate for X.509 / mutual TLS. Falls back to the JVM default keystore (`javax.net.ssl.keyStore`) when absent.
 
 | `quarkus.morphium.ssl.keystore-password`
 | –

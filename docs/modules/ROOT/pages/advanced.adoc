@@ -23,7 +23,21 @@ certificates signed by well-known CAs, including MongoDB Atlas).
 
 === X.509 Mutual TLS (Client Certificate Authentication)
 
-For X.509 authentication, provide both a keystore (client certificate) and a truststore:
+For X.509 authentication, only `ssl.enabled` and `ssl.auth-mechanism` are required.
+The client certificate and CA trust chain can come from the extension-specific keystore /
+truststore properties **or** from the global JVM stores (`javax.net.ssl.keyStore`,
+`javax.net.ssl.trustStore`). When no extension-specific paths are configured, the JVM
+defaults are used automatically.
+
+Minimal configuration (uses global JVM keystore and truststore):
+
+[source,properties]
+----
+quarkus.morphium.ssl.enabled=true
+quarkus.morphium.ssl.auth-mechanism=MONGODB-X509
+----
+
+With extension-specific stores (overrides the JVM defaults for this connection only):
 
 [source,properties]
 ----
