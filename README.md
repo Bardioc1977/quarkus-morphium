@@ -13,6 +13,11 @@ an actively maintained MongoDB ORM for Java.
 - **Zero-boilerplate CDI integration** – inject `Morphium` directly via `@Inject`; the extension manages the lifecycle
 - **Declarative transactions** – annotate methods with `@MorphiumTransactional` for automatic commit/rollback, with CDI events for transaction lifecycle hooks
 - **Type-safe configuration** – all settings live in `application.properties` under the `quarkus.morphium.*` prefix
+- **Dev Services** – automatic MongoDB container in dev/test mode, with optional single-node replica set for transactions
+- **Health checks** – MicroProfile liveness, readiness, and startup probes with connection pool metadata
+- **SSL/TLS & X.509** – encrypted connections and client-certificate authentication via `quarkus.morphium.ssl.*`
+- **Dev UI card** – MongoDB connection info displayed in the Quarkus Dev UI at `/q/dev-ui/`
+- **Blocking call detection** – warns when Morphium writes are called from the Vert.x event loop
 - **GraalVM native ready** – all `@Entity` and `@Embedded` classes are registered for reflection at build time; no manual `reflect-config.json` entries needed
 - **Test-friendly** – use `quarkus.morphium.driver-name=InMemDriver` in your test profile for fast, in-process tests without a running MongoDB
 - **Clean JDK 25 implementation** – no `sun.*` imports, no `Unsafe` access, no `--add-opens` for internal APIs
@@ -135,6 +140,19 @@ quarkus.morphium.local-date-time.use-bson-date=true
 | `quarkus.morphium.cache.read-cache-enabled` | `true` | Enable query result cache |
 | `quarkus.morphium.cache.global-valid-time` | `60000` | Cache TTL in milliseconds |
 | `quarkus.morphium.local-date-time.use-bson-date` | `true` | Store `LocalDateTime` as BSON `ISODate`; set `false` for legacy Morphium Map format |
+| `quarkus.morphium.ssl.enabled` | `false` | Enable TLS for the MongoDB connection |
+| `quarkus.morphium.ssl.auth-mechanism` | – | Authentication mechanism (`MONGODB-X509` for X.509 client-cert auth) |
+| `quarkus.morphium.ssl.keystore-path` | – | Path to keystore (JKS/PKCS12) for X.509 / mutual TLS |
+| `quarkus.morphium.ssl.keystore-password` | – | Keystore password |
+| `quarkus.morphium.ssl.truststore-path` | – | Path to truststore for server certificate validation |
+| `quarkus.morphium.ssl.truststore-password` | – | Truststore password |
+| `quarkus.morphium.ssl.invalid-hostname-allowed` | `false` | Allow self-signed hostnames (dev only) |
+| `quarkus.morphium.ssl.x509-username` | – | Explicit X.509 subject DN override |
+| `quarkus.morphium.devservices.replica-set` | `false` | Start single-node replica set (enables transactions) |
+| `quarkus.morphium.health.enabled` | `true` | Enable Morphium health checks (liveness, readiness, startup) |
+
+For the complete configuration reference including detailed descriptions, see the
+[Configuration Reference](https://bardioc1977.github.io/quarkus-morphium/quarkus-morphium/dev/configuration.html).
 
 ## Usage
 
@@ -296,6 +314,7 @@ No `application.properties` changes are needed.
 | `quarkus.morphium.devservices.enabled` | `true` | Set to `false` to disable |
 | `quarkus.morphium.devservices.image-name` | `mongo:8` | Docker image to use |
 | `quarkus.morphium.devservices.database-name` | `morphium-dev` | Database injected into `quarkus.morphium.database` |
+| `quarkus.morphium.devservices.replica-set` | `false` | Start single-node replica set (enables transactions in dev/test) |
 
 ```properties
 # Disable Dev Services and point to an external MongoDB instead:
@@ -405,6 +424,22 @@ This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.
 ## License
 
 This project is licensed under the [Apache License 2.0](LICENSE).
+
+## Documentation
+
+Comprehensive documentation is available as an Antora-generated site:
+
+**[quarkus-morphium Documentation](https://bardioc1977.github.io/quarkus-morphium/)**
+
+The documentation covers:
+- [Getting Started](https://bardioc1977.github.io/quarkus-morphium/quarkus-morphium/dev/getting-started.html) – installation, first entity, first query
+- [Configuration Reference](https://bardioc1977.github.io/quarkus-morphium/quarkus-morphium/dev/configuration.html) – all properties including SSL/TLS
+- [Entities & Annotations](https://bardioc1977.github.io/quarkus-morphium/quarkus-morphium/dev/entities.html) – `@Entity`, `@Embedded`, lifecycle hooks
+- [Transactions](https://bardioc1977.github.io/quarkus-morphium/quarkus-morphium/dev/transactions.html) – `@MorphiumTransactional`, CDI events
+- [Dev Services](https://bardioc1977.github.io/quarkus-morphium/quarkus-morphium/dev/dev-services.html) – automatic MongoDB container, replica-set mode
+- [Health Checks](https://bardioc1977.github.io/quarkus-morphium/quarkus-morphium/dev/health-checks.html) – MicroProfile probes, Kubernetes mapping
+- [Testing](https://bardioc1977.github.io/quarkus-morphium/quarkus-morphium/dev/testing.html) – Dev Services vs. InMemDriver strategies
+- [Advanced Topics](https://bardioc1977.github.io/quarkus-morphium/quarkus-morphium/dev/advanced.html) – SSL/TLS, Atlas SRV, blocking detection, GraalVM
 
 ## Related projects
 

@@ -16,6 +16,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - LICENSE copyright updated from `Bardioc1977` to `The Quarkiverse Authors`
 
 ### Added
+- **SSL/TLS configuration** – `quarkus.morphium.ssl.*` properties for encrypted connections,
+  X.509 client-certificate authentication, keystore/truststore paths, and hostname verification
+- **Health checks** – MicroProfile liveness (`/q/health/live`), readiness (`/q/health/ready`),
+  and startup (`/q/health/started`) probes registered automatically via SmallRye Health;
+  readiness includes connection pool metadata (connectionsInUse, threadsWaiting, per-host counts);
+  disable with `quarkus.morphium.health.enabled=false`
+- **Blocking call detector** – `MorphiumBlockingCallDetector` warns (throttled to 30s intervals)
+  when Morphium write operations are called from Vert.x event-loop threads; suggests
+  `@RunOnVirtualThread` or `@Blocking` as fix
+- **Dev Services replica-set mode** – `quarkus.morphium.devservices.replica-set=true` starts
+  MongoDB as a single-node replica set via `MongoDBContainer`, enabling multi-document
+  transactions in dev/test mode
+- **Dev UI card** – displays MongoDB connection info (hosts, database, mode, container ID,
+  status) in the Quarkus Dev UI at `/q/dev-ui/`
+- **Hot-reload entity cache clearing** – `ObjectMapperImpl.clearEntityCache()` called on
+  Morphium creation to avoid stale class references after Quarkus live reload
+- **Antora documentation** – comprehensive multi-page documentation site (9 pages) with
+  GitHub Pages deployment via GitHub Actions workflow
 - GitHub Packages Maven registry for artifact distribution (interim until Maven Central)
 - SNAPSHOT auto-deploy on push to main
 - Apache 2.0 copyright headers in all Java source files
