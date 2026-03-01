@@ -30,9 +30,21 @@ jobs:
       - name: Build Antora site
         run: npx antora@3.1.14 antora-playbook.yml
 
-      - name: Create root redirect
+      - name: Flatten site for GitHub Pages
         run: |
-          cat > build/site/quarkus-morphium/index.html <<'REDIRECT'
+          # Antora outputs pages to build/site/quarkus-morphium/dev/ and
+          # assets to build/site/_/. GitHub Pages serves this repo at
+          # /quarkus-morphium/, so deploying build/site/ as-is would double
+          # the component name in URLs. Fix: move dev/ and _/ to the same
+          # level and adjust all relative paths by removing one ../ level.
+          mv build/site/quarkus-morphium/dev build/site/dev
+          rm -rf build/site/quarkus-morphium
+          # Strip one directory level from all ../../ relative paths
+          find build/site/dev -name '*.html' -exec sed -i 's|\.\./\.\./|../|g' {} +
+          # Fix home links: ../.. (no trailing /) is not caught above
+          find build/site/dev -name '*.html' -exec sed -i 's|"\.\./\.\."|".."|g' {} +
+          # Replace Antora's redirect with one pointing to dev/
+          cat > build/site/index.html <<'REDIRECT'
           <!DOCTYPE html>
           <meta charset="utf-8">
           <script>location="dev/index.html"</script>
@@ -45,7 +57,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: build/site/quarkus-morphium
+          path: build/site
 
   deploy:
     if: github.ref == 'refs/heads/main'
