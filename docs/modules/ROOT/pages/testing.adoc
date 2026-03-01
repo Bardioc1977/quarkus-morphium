@@ -186,3 +186,120 @@ void setUp() {
 
 Alternatively, use `morphium.clearCollection(MyEntity.class)` to delete all documents
 while retaining the collection and its indexes (faster when index creation is expensive).
+
+[#transaction-testing]
+== Testing Transactions
+
+`@MorphiumTransactional` requires a replica set. The `InMemDriver` does not provide true
+multi-document atomicity, so transaction tests must use Dev Services with replica-set mode:
+
+[source,properties]
+----
+# src/test/resources/application.properties
+%test.quarkus.morphium.devservices.replica-set=true
+----
+
+[source,java]
+----
+@QuarkusTest
+class OrderServiceTransactionTest {
+
+    @Inject OrderService orderService;
+    @Inject Morphium morphium;
+
+    @BeforeEach
+    void setUp() {
+        morphium.dropCollection(Order.class);
+        morphium.dropCollection(Payment.class);
+    }
+
+    @Test
+    void commitOnSuccess() {
+        orderService.placeOrder(new Order("A1"), new Payment(42.0));
+        assertThat(morphium.createQueryFor(Order.class).countAll()).isEqualTo(1);
+    }
+
+    @Test
+    void rollbackOnFailure() {
+        assertThrows(RuntimeException.class, () ->
+            orderService.placeOrderThatFails(new Order("A2"), new Payment(0.0)));
+        assertThat(morphium.createQueryFor(Order.class).countAll()).isEqualTo(0);
+    }
+}
+----
+
+See xref:transactions.adoc[Transactions] for details on the transaction lifecycle.
+
+[#integration-tests]
+== Integration Tests
+
+For `@QuarkusIntegrationTest` (tests running against the packaged application), Dev Services
+are still available. The container started during the build phase is reused:
+
+[source,java]
+----
+import io.quarkus.test.junit.QuarkusIntegrationTest;
+
+@QuarkusIntegrationTest
+class ProductResourceIT {
+
+    @Test
+    void listProductsReturnsOk() {
+        given()
+            .when().get("/products")
+            .then().statusCode(200);
+    }
+}
+----
+
+For a complete example of integration tests with the Morphium extension, see the
+link:{showcase-github-url}[quarkus-morphium-showcase] project.
+
+[#inmem-limitations]
+== InMemDriver Limitations Reference
+
+.InMemDriver feature support
+[cols="2,1,2",options="header"]
+|===
+| Feature | Supported | Notes
+
+| CRUD (`store`, `delete`, query)
+| yes
+| Full support
+
+| Index creation (`ensureIndicesFor`)
+| yes
+| No-op, always succeeds
+
+| Collection management (`drop`, `clear`)
+| yes
+| Full support
+
+| `@Version` optimistic locking
+| yes
+| Full support
+
+| Simple aggregations (`$match`, `$group`, `$sort`)
+| partial
+| Basic stages only
+
+| Complex aggregations (`$lookup`, `$facet`, `$graphLookup`)
+| no
+| Use Dev Services for these tests
+
+| Geospatial queries
+| no
+| Use Dev Services
+
+| Multi-document transactions
+| best-effort
+| No true atomicity — use Dev Services with `replica-set=true`
+
+| Change streams
+| no
+| Use Dev Services
+
+| X.509 / SCRAM auth commands
+| no
+| Logged as WARN, safely ignored
+|===

@@ -1,0 +1,179 @@
+= Entities & Annotations
+
+include::./includes/attributes.adoc[]
+
+Morphium maps Java POJOs to MongoDB documents using annotations. This page covers all
+annotations supported by the Quarkus extension.
+
+== @Entity
+
+Marks a class as a top-level MongoDB document stored in its own collection.
+
+[source,java]
+----
+import de.caluga.morphium.annotations.Entity;
+
+@Entity(collectionName = "products")
+public class ProductEntity {
+    // ...
+}
+----
+
+The `collectionName` parameter specifies the MongoDB collection name. If omitted, Morphium
+derives it from the class name (lowercased).
+
+== @Embedded
+
+Marks a class as an embedded (sub-)document that is stored inside another entity's document,
+not in its own collection.
+
+[source,java]
+----
+import de.caluga.morphium.annotations.Embedded;
+
+@Embedded
+public class AddressEmbedded {
+    @Property(fieldName = "street") private String street;
+    @Property(fieldName = "city")   private String city;
+    // getters / setters
+}
+----
+
+Use embedded documents for data that doesn't need its own collection and is always loaded
+together with the parent entity.
+
+== @Id
+
+Marks the primary key field. Morphium supports `MorphiumId` (similar to MongoDB `ObjectId`)
+and `String` as ID types.
+
+[source,java]
+----
+import de.caluga.morphium.annotations.Id;
+
+@Id
+private String id;
+----
+
+Morphium automatically generates the ID on `store()` if the field is `null`.
+
+== @Property
+
+Maps a Java field to a specific MongoDB document field name.
+
+[source,java]
+----
+import de.caluga.morphium.annotations.Property;
+
+@Property(fieldName = "display_name")
+private String name;
+----
+
+Without `@Property`, Morphium uses the Java field name as-is.
+
+== @Version — Optimistic Locking
+
+Enables optimistic locking. Morphium increments the version on every `store()` and throws an
+exception if the document was modified concurrently.
+
+[source,java]
+----
+import de.caluga.morphium.annotations.Version;
+
+@Version
+@Property(fieldName = "version")
+private long version;
+----
+
+For more details see the link:{morphium-docs-url}[Morphium core documentation].
+
+== @AutoSequence
+
+Generates automatic, sequential numeric IDs using a server-side sequence.
+
+[source,java]
+----
+import de.caluga.morphium.annotations.AutoSequence;
+
+@AutoSequence
+@Id
+private long id;
+----
+
+For details on sequence configuration see the link:{morphium-docs-url}[Morphium core documentation].
+
+== Lifecycle Annotations
+
+Morphium supports lifecycle callbacks via annotations. Annotate the entity class with
+`@Lifecycle` and individual methods with the appropriate callback annotation.
+
+[source,java]
+----
+import de.caluga.morphium.annotations.lifecycle.*;
+
+@Entity(collectionName = "products")
+@Lifecycle
+public class ProductEntity {
+
+    @PreStore
+    public void beforeSave() {
+        // called before each store() operation
+    }
+
+    @PostStore
+    public void afterSave() {
+        // called after a successful store()
+    }
+}
+----
+
+.Available lifecycle annotations
+[cols="1,3",options="header"]
+|===
+| Annotation | When it fires
+
+| `@PreStore`
+| Before `store()` — validate or set defaults
+
+| `@PostStore`
+| After a successful `store()`
+
+| `@PreRemove`
+| Before `delete()`
+
+| `@PostRemove`
+| After a successful `delete()`
+
+| `@PostLoad`
+| After loading a document from MongoDB
+|===
+
+== @Cache
+
+Enables query-result caching for an entity type. Cached queries are served from memory until
+the cache TTL expires or the cache is invalidated by a write operation.
+
+[source,java]
+----
+import de.caluga.morphium.annotations.caching.Cache;
+
+@Cache(maxEntries = 1000, clearOnWrite = true)
+@Entity(collectionName = "products")
+public class ProductEntity {
+    // ...
+}
+----
+
+Cache behavior is controlled globally via `quarkus.morphium.cache.*` properties (see
+xref:configuration.adoc[Configuration Reference]) and per-entity via `@Cache` attributes.
+For advanced caching patterns see the link:{morphium-docs-url}[Morphium core documentation].
+
+== GraalVM Native Image
+
+All classes annotated with `@Entity` or `@Embedded` are automatically registered for GraalVM
+reflection at build time. The Quarkus deployment processor uses ClassGraph to scan the
+classpath and registers constructors, methods, and fields for each annotated class.
+
+No manual `reflect-config.json` entries are needed. If the classpath scan fails (logged as a
+WARN at build time), you can add entries manually via standard GraalVM reflection
+configuration.
