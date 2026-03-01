@@ -41,7 +41,7 @@ All configuration properties live under the `quarkus.morphium.*` prefix in
 
 | `quarkus.morphium.create-indexes`
 | `true`
-| Automatically create / verify indexes on write operations.
+| Automatically create / verify indexes on startup.
 
 | `quarkus.morphium.max-connections`
 | `250`
@@ -176,7 +176,7 @@ See xref:dev-services.adoc[Dev Services] for details.
 
 | `quarkus.morphium.health.enabled`
 | `true`
-| Enable Morphium health checks (liveness, readiness, startup). Requires `quarkus-smallrye-health` on the classpath.
+| Enable Morphium health checks (liveness, readiness, startup) via SmallRye Health. Health endpoints are available by default when the extension is present.
 |===
 
 == Environment Variable Overrides

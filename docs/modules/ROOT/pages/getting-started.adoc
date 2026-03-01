@@ -7,7 +7,7 @@ MongoDB connection, defining your first entity, and performing basic CRUD operat
 
 == Prerequisites
 
-* JDK 17+
+* JDK 21+
 * Apache Maven 3.9+
 * A running MongoDB instance (or just use <<dev-services,Dev Services>> — no setup needed)
 

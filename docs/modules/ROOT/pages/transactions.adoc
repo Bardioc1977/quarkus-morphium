@@ -29,6 +29,7 @@ Annotate any CDI bean method to wrap it in a Morphium transaction:
 
 [source,java]
 ----
+import de.caluga.morphium.Morphium;
 import de.caluga.morphium.quarkus.transaction.MorphiumTransactional;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -62,7 +63,7 @@ The interceptor executes at priority `PLATFORM_BEFORE + 200` and follows this se
 On exception:
 
 1. `morphium.abortTransaction()`
-2. Fire `AFTER_ROLLBACK` CDI event (with the causing `Throwable`)
+2. Fire `AFTER_ROLLBACK` CDI event (with the causing `Exception`)
 3. Re-throw the exception
 
 == Transaction Lifecycle Events
@@ -72,19 +73,23 @@ Use `@Observes` with the `@MorphiumTxPhase` qualifier to react to transaction ph
 [source,java]
 ----
 import de.caluga.morphium.quarkus.transaction.*;
+import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
+import org.jboss.logging.Logger;
 
 import static de.caluga.morphium.quarkus.transaction.MorphiumTransactionEvent.Phase.*;
 
 @ApplicationScoped
 public class AuditObserver {
 
+    private static final Logger LOG = Logger.getLogger(AuditObserver.class);
+
     void afterCommit(@Observes @MorphiumTxPhase(AFTER_COMMIT) MorphiumTransactionEvent e) {
         // e.g. publish a domain event
     }
 
     void afterRollback(@Observes @MorphiumTxPhase(AFTER_ROLLBACK) MorphiumTransactionEvent e) {
-        log.warn("Transaction rolled back", e.getFailure());
+        LOG.warn("Transaction rolled back", e.getFailure());
     }
 }
 ----
@@ -104,7 +109,7 @@ public class AuditObserver {
 
 | `AFTER_ROLLBACK`
 | After `abortTransaction()` due to an exception
-| The causing `Throwable`
+| The causing `Exception`
 |===
 
 == Testing Transactions

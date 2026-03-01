@@ -2,7 +2,7 @@
 
 include::./includes/attributes.adoc[]
 
-[[ssl-tls]]
+[#ssl-tls]
 == SSL/TLS Connections
 
 The extension supports TLS-encrypted connections and X.509 client-certificate authentication.
