@@ -58,6 +58,11 @@
       <groupId>org.testcontainers</groupId>
       <artifactId>testcontainers</artifactId>
     </dependency>
+    <!-- MongoDBContainer: single-node replica set support for devservices.replica-set=true -->
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-mongodb</artifactId>
+    </dependency>
   </dependencies>
 
   <build>
