@@ -112,6 +112,29 @@ public class AuditObserver {
 | The causing `Exception`
 |===
 
+== CosmosDB Compatibility
+
+When running against Azure CosmosDB, Morphium auto-detects the backend via the
+`hello` handshake. Because CosmosDB does not support multi-document transactions,
+`@MorphiumTransactional` **gracefully degrades**: the interceptor skips transaction
+wrapping and executes the method directly.
+
+A single WARN-level message is logged at application startup if CosmosDB is
+detected, and each subsequent invocation is logged at DEBUG level:
+
+[source,text]
+----
+WARN  CosmosDB detected – @MorphiumTransactional methods will execute WITHOUT
+      transaction wrapping. Individual ops remain atomic; multi-document rollback is unavailable.
+----
+
+[NOTE]
+====
+On CosmosDB, lifecycle events (`BEFORE_COMMIT`, `AFTER_COMMIT`, `AFTER_ROLLBACK`)
+are *not* fired because no transaction is active. Individual Morphium operations
+(`store`, `inc`, `set`, etc.) remain atomic at the document level.
+====
+
 == Testing Transactions
 
 To test `@MorphiumTransactional` methods, you need a replica set. Configure Dev Services

@@ -20,6 +20,7 @@ import org.slf4j.LoggerFactory;
 
 import de.caluga.morphium.Morphium;
 import de.caluga.morphium.quarkus.transaction.MorphiumTransactionEvent.Phase;
+import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.event.Event;
 import jakarta.inject.Inject;
 import jakarta.interceptor.AroundInvoke;
@@ -34,6 +35,8 @@ import jakarta.interceptor.InvocationContext;
  *   <li>Fires {@link Phase#BEFORE_COMMIT} before committing.</li>
  *   <li>Fires {@link Phase#AFTER_COMMIT} after a successful commit.</li>
  *   <li>On exception: aborts, fires {@link Phase#AFTER_ROLLBACK}, re-throws.</li>
+ *   <li>On CosmosDB: skips transaction wrapping entirely; the method executes
+ *       directly. A one-time WARN is logged at startup and per-call at DEBUG.</li>
  * </ul>
  */
 @MorphiumTransactional
@@ -58,13 +61,31 @@ public class MorphiumTransactionalInterceptor {
     @MorphiumTxPhase(Phase.AFTER_ROLLBACK)
     Event<MorphiumTransactionEvent> afterRollback;
 
+    /** Cached at startup; CosmosDB detection is stable for the lifetime of the app. */
+    private boolean cosmosDb;
+
+    @PostConstruct
+    void init() {
+        try {
+            cosmosDb = morphium.getDriver().isCosmosDB();
+        } catch (Exception e) {
+            log.warn("Could not determine if backend is CosmosDB; assuming standard MongoDB. Cause: {}", e.getMessage());
+            cosmosDb = false;
+        }
+        if (cosmosDb) {
+            log.warn("CosmosDB detected – @MorphiumTransactional methods will execute "
+                    + "WITHOUT transaction wrapping. Individual ops remain atomic; "
+                    + "multi-document rollback is unavailable.");
+        }
+    }
+
     @AroundInvoke
     Object aroundInvoke(InvocationContext ctx) throws Exception {
         // CosmosDB: execute without transaction wrapping
-        if (morphium.getDriver().isCosmosDB()) {
-            log.warn("CosmosDB: @MorphiumTransactional on {} executes WITHOUT "
-                   + "transaction. Individual ops remain atomic.",
-                     ctx.getMethod().getName());
+        if (cosmosDb) {
+            log.debug("CosmosDB: @MorphiumTransactional on {}.{} executes WITHOUT transaction.",
+                    ctx.getMethod().getDeclaringClass().getSimpleName(),
+                    ctx.getMethod().getName());
             return ctx.proceed();
         }
 
