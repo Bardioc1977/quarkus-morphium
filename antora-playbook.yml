@@ -1,0 +1,12 @@
+site:
+  title: Quarkus Morphium Extension
+  start_page: quarkus-morphium::index.adoc
+content:
+  sources:
+    - url: .
+      start_path: docs
+      branches: HEAD
+ui:
+  bundle:
+    url: https://github.com/quarkiverse/antora-ui-quarkiverse/releases/latest/download/ui-bundle.zip
+    snapshot: true
