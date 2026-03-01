@@ -26,8 +26,10 @@ import jakarta.inject.Inject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Detects Morphium write operations that are called from the Vert.x I/O event-loop thread.
@@ -50,6 +52,8 @@ public class MorphiumBlockingCallDetector {
 
     private static final Logger log = LoggerFactory.getLogger(MorphiumBlockingCallDetector.class);
     private static final String EVENTLOOP_THREAD_PREFIX = "vert.x-eventloop-thread";
+    private static final long WARN_INTERVAL_NANOS = Duration.ofSeconds(30).toNanos();
+    private final AtomicLong lastWarnNanos = new AtomicLong(0);
 
     @Inject
     Morphium morphium;
@@ -115,7 +119,7 @@ public class MorphiumBlockingCallDetector {
 
     private void warnIfOnEventLoop() {
         String threadName = Thread.currentThread().getName();
-        if (threadName.startsWith(EVENTLOOP_THREAD_PREFIX)) {
+        if (threadName.startsWith(EVENTLOOP_THREAD_PREFIX) && shouldWarnNow()) {
             log.warn("""
                     [Morphium] Blocking write operation called from Vert.x I/O thread '{}'.
                     This blocks the event loop and can cause request timeouts and health-check failures.
@@ -123,5 +127,11 @@ public class MorphiumBlockingCallDetector {
                     See: https://quarkus.io/guides/rest#blocking-non-blocking""",
                     threadName);
         }
+    }
+
+    private boolean shouldWarnNow() {
+        long now = System.nanoTime();
+        long last = lastWarnNanos.get();
+        return now - last >= WARN_INTERVAL_NANOS && lastWarnNanos.compareAndSet(last, now);
     }
 }

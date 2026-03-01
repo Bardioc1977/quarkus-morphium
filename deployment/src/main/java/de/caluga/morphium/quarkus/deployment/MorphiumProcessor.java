@@ -66,7 +66,7 @@ public class MorphiumProcessor {
 
     @BuildStep
     AdditionalBeanBuildItem registerBeans() {
-        // Only MorphiumProducer is a CDI bean.
+        // Register runtime CDI beans required by the extension.
         // MorphiumRuntimeConfig / CacheConfig are @ConfigMapping interfaces and are
         // registered automatically by the SmallRye Config Quarkus extension.
         // MorphiumRecorder is a @Recorder (build-time only) and must not appear here.
