@@ -28,7 +28,7 @@ jobs:
           node-version: '20'
 
       - name: Build Antora site
-        run: npx antora antora-playbook.yml
+        run: npx antora@3.1.14 antora-playbook.yml
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
