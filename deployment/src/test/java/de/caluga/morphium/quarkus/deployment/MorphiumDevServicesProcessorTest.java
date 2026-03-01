@@ -134,17 +134,19 @@ class MorphiumDevServicesProcessorTest {
     }
 
     // -------------------------------------------------------------------------
-    // Shutdown hook guard: flag must default to false on fresh class load
+    // Shutdown hook guard: field is writable via reflection (for test reset)
     // -------------------------------------------------------------------------
 
     @Test
-    @DisplayName("shutdownHookRegistered starts at false when explicitly reset")
-    void shutdownHookRegistered_canBeReset() throws Exception {
+    @DisplayName("shutdownHookRegistered can be read and written via reflection")
+    void shutdownHookRegistered_isAccessibleViaReflection() throws Exception {
         Field f = MorphiumDevServicesProcessor.class.getDeclaredField("shutdownHookRegistered");
         f.setAccessible(true);
         boolean original = (boolean) f.get(null);
-        f.set(null, false);
         try {
+            f.set(null, true);
+            assertThat((boolean) f.get(null)).isTrue();
+            f.set(null, false);
             assertThat((boolean) f.get(null)).isFalse();
         } finally {
             f.set(null, original);
