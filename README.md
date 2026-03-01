@@ -32,7 +32,7 @@ an actively maintained MongoDB ORM for Java.
 |---|---|
 | Java | 21 |
 | Quarkus | 3.32.1 |
-| Morphium | 6.1.9 |
+| Morphium | 6.2.0 |
 
 ## Installation
 
@@ -408,7 +408,7 @@ property, as `true` is the default).
 ## Building from source
 
 ```bash
-# Build and install locally (requires Morphium 6.1.9-SNAPSHOT)
+# Build and install locally (requires Morphium 6.2.0-SNAPSHOT)
 mvn install
 
 # Skip tests
