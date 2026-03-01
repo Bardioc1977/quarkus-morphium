@@ -15,6 +15,9 @@
  */
 package de.caluga.morphium.quarkus.transaction;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import de.caluga.morphium.Morphium;
 import de.caluga.morphium.quarkus.transaction.MorphiumTransactionEvent.Phase;
 import jakarta.enterprise.event.Event;
@@ -38,6 +41,8 @@ import jakarta.interceptor.InvocationContext;
 @jakarta.annotation.Priority(Interceptor.Priority.PLATFORM_BEFORE + 200)
 public class MorphiumTransactionalInterceptor {
 
+    private static final Logger log = LoggerFactory.getLogger(MorphiumTransactionalInterceptor.class);
+
     @Inject
     Morphium morphium;
 
@@ -55,6 +60,14 @@ public class MorphiumTransactionalInterceptor {
 
     @AroundInvoke
     Object aroundInvoke(InvocationContext ctx) throws Exception {
+        // CosmosDB: execute without transaction wrapping
+        if (morphium.getDriver().isCosmosDB()) {
+            log.warn("CosmosDB: @MorphiumTransactional on {} executes WITHOUT "
+                   + "transaction. Individual ops remain atomic.",
+                     ctx.getMethod().getName());
+            return ctx.proceed();
+        }
+
         morphium.startTransaction();
         try {
             Object result = ctx.proceed();
