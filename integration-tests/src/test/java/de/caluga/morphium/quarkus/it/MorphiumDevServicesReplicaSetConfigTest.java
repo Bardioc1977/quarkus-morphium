@@ -72,6 +72,10 @@ class MorphiumDevServicesReplicaSetConfigTest {
         assertThat(ConfigProvider.getConfig()
                 .getValue("quarkus.morphium.devservices.enabled", String.class))
                 .isEqualTo("false");
+        assertThat(ConfigProvider.getConfig()
+                .getValue("quarkus.morphium.devservices.replica-set", String.class))
+                .as("replica-set profile override must be present")
+                .isEqualTo("true");
     }
 
     @Test
