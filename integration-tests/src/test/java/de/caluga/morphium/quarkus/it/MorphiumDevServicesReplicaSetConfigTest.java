@@ -28,12 +28,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Integration test verifying that {@code quarkus.morphium.devservices.replica-set=true}
- * is a valid config key and is picked up by the Quarkus config system at runtime.
+ * does not prevent Quarkus application startup.
  *
  * <p>Dev Services are disabled in this profile ({@code devservices.enabled=false}) so
- * no MongoDB container is started. The purpose of this test is solely to confirm that
- * the {@code replica-set} property is recognised, does not cause a startup failure, and
- * can be read back with the expected value.
+ * no MongoDB container is started. This test verifies the config key is accepted by
+ * Quarkus without causing startup errors. The actual {@code @ConfigMapping} binding
+ * (property-name → method) is covered by
+ * {@code MorphiumDevServicesConfigDefaultsTest} in the deployment module.
  */
 @QuarkusTest
 @TestProfile(MorphiumDevServicesReplicaSetConfigTest.ReplicaSetEnabledProfile.class)
@@ -58,24 +59,19 @@ class MorphiumDevServicesReplicaSetConfigTest {
     }
 
     @Test
-    @DisplayName("replica-set config key is readable and returns 'true'")
-    void replicaSetConfig_isReadable() {
-        String value = ConfigProvider.getConfig()
-                .getValue("quarkus.morphium.devservices.replica-set", String.class);
-        assertThat(value).isEqualTo("true");
-    }
-
-    @Test
     @DisplayName("replica-set=true with devservices.enabled=false does not prevent startup")
     void replicaSet_withDevServicesDisabled_appStartsSuccessfully() {
-        // Reaching this point means the application started without errors.
-        // We just verify the related properties are set as expected.
+        // Reaching this point means the Quarkus application started without errors
+        // despite replica-set=true being set. This proves the config key is accepted
+        // by the Quarkus config system and does not cause an unknown-property failure.
+        //
+        // NOTE: This does NOT prove that @ConfigMapping binds the key to
+        // MorphiumDevServicesBuildTimeConfig.replicaSet(). That binding is tested
+        // by MorphiumDevServicesConfigDefaultsTest in the deployment module using
+        // SmallRyeConfigBuilder.withMapping().
         assertThat(ConfigProvider.getConfig()
                 .getValue("quarkus.morphium.devservices.enabled", String.class))
                 .isEqualTo("false");
-        assertThat(ConfigProvider.getConfig()
-                .getValue("quarkus.morphium.devservices.replica-set", String.class))
-                .isEqualTo("true");
     }
 
     @Test

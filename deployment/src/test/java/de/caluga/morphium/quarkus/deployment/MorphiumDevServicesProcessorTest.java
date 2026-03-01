@@ -103,23 +103,31 @@ class MorphiumDevServicesProcessorTest {
     }
 
     // -------------------------------------------------------------------------
-    // Mode-detection contract: instanceof MongoDBContainer
+    // Mode-detection type contract (documentation tests)
+    //
+    // MorphiumDevServicesProcessor.startDevServices() uses
+    //     devContainer instanceof MongoDBContainer
+    // to detect whether the running container is a replica set or standalone.
+    // This relies on Testcontainers' class hierarchy: MongoDBContainer extends
+    // GenericContainer but not vice versa. These tests document that contract
+    // so that a Testcontainers upgrade that breaks it is caught immediately.
+    //
+    // The actual branching logic (standalone vs replica-set) is exercised by
+    // MorphiumDevServicesConfigDefaultsTest (config binding) and the
+    // integration test MorphiumDevServicesReplicaSetConfigTest (startup).
     // -------------------------------------------------------------------------
 
     @Test
-    @DisplayName("MongoDBContainer IS-A GenericContainer (replica-set mode IS detected by instanceof)")
-    void modeDetection_mongoDbContainerIsAssignableToGenericContainer() {
-        // MongoDBContainer extends GenericContainer, so instanceof GenericContainer is always true.
-        // A plain GenericContainer (standalone) instanceof MongoDBContainer = false.
-        // This is the contract relied upon in startDevServices().
+    @DisplayName("[contract] MongoDBContainer extends GenericContainer")
+    void typeContract_mongoDbContainerExtendsGenericContainer() {
         assertThat(GenericContainer.class.isAssignableFrom(MongoDBContainer.class))
                 .as("MongoDBContainer must extend GenericContainer")
                 .isTrue();
     }
 
     @Test
-    @DisplayName("GenericContainer is NOT-A MongoDBContainer (standalone is NOT detected as replica-set)")
-    void modeDetection_genericContainerIsNotMongoDBContainer() {
+    @DisplayName("[contract] GenericContainer is NOT a MongoDBContainer")
+    void typeContract_genericContainerIsNotMongoDBContainer() {
         assertThat(MongoDBContainer.class.isAssignableFrom(GenericContainer.class))
                 .as("A plain GenericContainer must NOT be assignable to MongoDBContainer")
                 .isFalse();
