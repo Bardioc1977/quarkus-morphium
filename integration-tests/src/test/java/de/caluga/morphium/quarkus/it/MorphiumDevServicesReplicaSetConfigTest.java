@@ -27,18 +27,21 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Integration test verifying that {@code quarkus.morphium.devservices.replica-set=true}
- * does not prevent Quarkus application startup.
+ * Integration test verifying that the application starts successfully when
+ * {@code quarkus.morphium.devservices.replica-set=true} is set alongside
+ * {@code devservices.enabled=false}.
  *
- * <p>Dev Services are disabled in this profile ({@code devservices.enabled=false}) so
- * no MongoDB container is started. This test verifies the config key is accepted by
- * Quarkus without causing startup errors. The actual {@code @ConfigMapping} binding
- * (property-name → method) is covered by
+ * <p>No MongoDB container is started. This test only proves that the config
+ * overrides are present in MicroProfile Config and that startup completes
+ * without errors — it does <em>not</em> prove that Quarkus treats the key as
+ * a recognised {@code @ConfigMapping} property (MicroProfile Config returns
+ * arbitrary keys from any config source). The actual {@code @ConfigMapping}
+ * binding (property-name → {@code replicaSet()} method) is covered by
  * {@code MorphiumDevServicesConfigDefaultsTest} in the deployment module.
  */
 @QuarkusTest
 @TestProfile(MorphiumDevServicesReplicaSetConfigTest.ReplicaSetEnabledProfile.class)
-@DisplayName("Dev Services – replica-set config key (no container)")
+@DisplayName("Dev Services – startup with replica-set override (no container)")
 class MorphiumDevServicesReplicaSetConfigTest {
 
     /**
@@ -62,13 +65,11 @@ class MorphiumDevServicesReplicaSetConfigTest {
     @DisplayName("replica-set=true with devservices.enabled=false does not prevent startup")
     void replicaSet_withDevServicesDisabled_appStartsSuccessfully() {
         // Reaching this point means the Quarkus application started without errors
-        // despite replica-set=true being set. This proves the config key is accepted
-        // by the Quarkus config system and does not cause an unknown-property failure.
-        //
-        // NOTE: This does NOT prove that @ConfigMapping binds the key to
-        // MorphiumDevServicesBuildTimeConfig.replicaSet(). That binding is tested
-        // by MorphiumDevServicesConfigDefaultsTest in the deployment module using
-        // SmallRyeConfigBuilder.withMapping().
+        // despite replica-set=true being set. We assert both overrides are present
+        // in MicroProfile Config. Note: this does NOT prove Quarkus treats them as
+        // recognised @ConfigMapping properties — MicroProfile Config returns any key
+        // from any config source. The actual binding is tested by
+        // MorphiumDevServicesConfigDefaultsTest in the deployment module.
         assertThat(ConfigProvider.getConfig()
                 .getValue("quarkus.morphium.devservices.enabled", String.class))
                 .isEqualTo("false");
