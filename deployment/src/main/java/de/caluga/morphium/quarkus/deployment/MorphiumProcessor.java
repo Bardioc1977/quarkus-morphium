@@ -25,6 +25,8 @@ import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
 import io.quarkus.deployment.builditem.FeatureBuildItem;
 import io.quarkus.deployment.builditem.nativeimage.ReflectiveClassBuildItem;
+import io.quarkus.smallrye.health.deployment.spi.HealthBuildItem;
+import de.caluga.morphium.quarkus.MorphiumBlockingCallDetector;
 import de.caluga.morphium.quarkus.MorphiumProducer;
 import de.caluga.morphium.quarkus.transaction.MorphiumTransactionalInterceptor;
 import org.slf4j.Logger;
@@ -71,9 +73,35 @@ public class MorphiumProcessor {
         return AdditionalBeanBuildItem.builder()
             .addBeanClasses(
                 MorphiumProducer.class,
-                MorphiumTransactionalInterceptor.class)
+                MorphiumTransactionalInterceptor.class,
+                MorphiumBlockingCallDetector.class)
             .setUnremovable()
             .build();
+    }
+
+    // ------------------------------------------------------------------
+    // Health check registration
+    // ------------------------------------------------------------------
+
+    @BuildStep
+    HealthBuildItem addLivenessCheck(MorphiumHealthBuildTimeConfig config) {
+        return new HealthBuildItem(
+                "de.caluga.morphium.quarkus.health.MorphiumLivenessCheck",
+                config.enabled());
+    }
+
+    @BuildStep
+    HealthBuildItem addReadinessCheck(MorphiumHealthBuildTimeConfig config) {
+        return new HealthBuildItem(
+                "de.caluga.morphium.quarkus.health.MorphiumReadinessCheck",
+                config.enabled());
+    }
+
+    @BuildStep
+    HealthBuildItem addStartupCheck(MorphiumHealthBuildTimeConfig config) {
+        return new HealthBuildItem(
+                "de.caluga.morphium.quarkus.health.MorphiumStartupCheck",
+                config.enabled());
     }
 
     // ------------------------------------------------------------------
