@@ -66,8 +66,15 @@ public class MorphiumDevUIProcessor {
             rows.add(Map.of("Property", "Container ID", "Value", shortId));
             rows.add(Map.of("Property", "Status",       "Value", "Running"));
         } else {
-            rows.add(Map.of("Property", "Status", "Value",
-                    "Not started (Dev Services disabled or quarkus.morphium.hosts set)"));
+            String mode = devServicesConfig.replicaSet()
+                    ? "Replica Set (transactions enabled)"
+                    : "Standalone";
+            rows.add(Map.of("Property", "Hosts",        "Value", "n/a"));
+            rows.add(Map.of("Property", "Database",     "Value", "n/a"));
+            rows.add(Map.of("Property", "Mode",         "Value", mode));
+            rows.add(Map.of("Property", "Container ID", "Value", "n/a"));
+            rows.add(Map.of("Property", "Status",       "Value",
+                    "Not started (Dev Services disabled, quarkus.morphium.hosts set, or container startup failed — check logs)"));
         }
         card.addBuildTimeData("connectionInfo", rows);
 
