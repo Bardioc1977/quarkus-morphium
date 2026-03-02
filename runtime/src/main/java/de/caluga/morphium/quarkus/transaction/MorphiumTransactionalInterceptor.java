@@ -87,7 +87,15 @@ public class MorphiumTransactionalInterceptor {
             return ctx.proceed();
         }
 
-        morphium.startTransaction();
+        try {
+            morphium.startTransaction();
+        } catch (UnsupportedOperationException e) {
+            // Defensive fallback: init() missed CosmosDB detection (e.g. driver not yet connected)
+            cosmosDb = true;
+            log.warn("startTransaction() threw UnsupportedOperationException — "
+                    + "switching to CosmosDB mode for all future invocations.");
+            return ctx.proceed();
+        }
         try {
             Object result = ctx.proceed();
             beforeCommit.fire(new MorphiumTransactionEvent(Phase.BEFORE_COMMIT));
