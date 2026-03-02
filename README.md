@@ -4,12 +4,12 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Quarkus](https://img.shields.io/badge/Quarkus-3.32.1-blue)](https://quarkus.io)
 [![Java](https://img.shields.io/badge/Java-21%2B-orange)](https://adoptium.net)
-[![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-brightgreen)](https://bardioc1977.github.io/quarkus-morphium/quarkus-morphium/dev/index.html)
+[![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-brightgreen)](https://bardioc1977.github.io/quarkus-morphium/dev/index.html)
 
 A [Quarkus](https://quarkus.io) CDI extension for [Morphium](https://github.com/sboesebeck/morphium),
 an actively maintained MongoDB ORM for Java.
 
-**[Read the full documentation](https://bardioc1977.github.io/quarkus-morphium/quarkus-morphium/dev/index.html)**
+**[Read the full documentation](https://bardioc1977.github.io/quarkus-morphium/dev/index.html)**
 
 ## Features
 
@@ -156,7 +156,7 @@ quarkus.morphium.local-date-time.use-bson-date=true
 | `quarkus.morphium.health.enabled` | `true` | Enable Morphium health checks (liveness, readiness, startup) |
 
 For the complete configuration reference including detailed descriptions, see the
-[Configuration Reference](https://bardioc1977.github.io/quarkus-morphium/quarkus-morphium/dev/configuration.html).
+[Configuration Reference](https://bardioc1977.github.io/quarkus-morphium/dev/configuration.html).
 
 ## Usage
 
@@ -433,17 +433,17 @@ This project is licensed under the [Apache License 2.0](LICENSE).
 
 Comprehensive documentation is available as an Antora-generated site:
 
-**[quarkus-morphium Documentation](https://bardioc1977.github.io/quarkus-morphium/quarkus-morphium/dev/index.html)**
+**[quarkus-morphium Documentation](https://bardioc1977.github.io/quarkus-morphium/dev/index.html)**
 
 The documentation covers:
-- [Getting Started](https://bardioc1977.github.io/quarkus-morphium/quarkus-morphium/dev/getting-started.html) – installation, first entity, first query
-- [Configuration Reference](https://bardioc1977.github.io/quarkus-morphium/quarkus-morphium/dev/configuration.html) – all properties including SSL/TLS
-- [Entities & Annotations](https://bardioc1977.github.io/quarkus-morphium/quarkus-morphium/dev/entities.html) – `@Entity`, `@Embedded`, lifecycle hooks
-- [Transactions](https://bardioc1977.github.io/quarkus-morphium/quarkus-morphium/dev/transactions.html) – `@MorphiumTransactional`, CDI events
-- [Dev Services](https://bardioc1977.github.io/quarkus-morphium/quarkus-morphium/dev/dev-services.html) – automatic MongoDB container, replica-set mode
-- [Health Checks](https://bardioc1977.github.io/quarkus-morphium/quarkus-morphium/dev/health-checks.html) – MicroProfile probes, Kubernetes mapping
-- [Testing](https://bardioc1977.github.io/quarkus-morphium/quarkus-morphium/dev/testing.html) – Dev Services vs. InMemDriver strategies
-- [Advanced Topics](https://bardioc1977.github.io/quarkus-morphium/quarkus-morphium/dev/advanced.html) – SSL/TLS, Atlas SRV, blocking detection, GraalVM
+- [Getting Started](https://bardioc1977.github.io/quarkus-morphium/dev/getting-started.html) – installation, first entity, first query
+- [Configuration Reference](https://bardioc1977.github.io/quarkus-morphium/dev/configuration.html) – all properties including SSL/TLS
+- [Entities & Annotations](https://bardioc1977.github.io/quarkus-morphium/dev/entities.html) – `@Entity`, `@Embedded`, lifecycle hooks
+- [Transactions](https://bardioc1977.github.io/quarkus-morphium/dev/transactions.html) – `@MorphiumTransactional`, CDI events
+- [Dev Services](https://bardioc1977.github.io/quarkus-morphium/dev/dev-services.html) – automatic MongoDB container, replica-set mode
+- [Health Checks](https://bardioc1977.github.io/quarkus-morphium/dev/health-checks.html) – MicroProfile probes, Kubernetes mapping
+- [Testing](https://bardioc1977.github.io/quarkus-morphium/dev/testing.html) – Dev Services vs. InMemDriver strategies
+- [Advanced Topics](https://bardioc1977.github.io/quarkus-morphium/dev/advanced.html) – SSL/TLS, Atlas SRV, blocking detection, GraalVM
 
 ## Related projects
 
