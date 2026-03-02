@@ -31,7 +31,7 @@ For a detailed list of all changes see [CHANGELOG.md](CHANGELOG.md).
 |---|---|
 | Java | 21+ |
 | Quarkus | 3.32.1 |
-| Morphium | 6.2.0-SNAPSHOT |
+| Morphium | 6.1.10-SNAPSHOT |
 
 ### Distribution
 
