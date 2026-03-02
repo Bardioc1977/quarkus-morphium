@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (CosmosDB)
+- **CosmosDB graceful degradation** – `@MorphiumTransactional` interceptor auto-detects
+  Azure CosmosDB via Morphium's `isCosmosDB()` driver API and skips transaction wrapping;
+  individual operations remain atomic, only multi-document rollback is unavailable
+- Detection cached at startup via `@PostConstruct`; defensive fallback catches
+  `UnsupportedOperationException` from `startTransaction()` if detection was missed
+- Uses JBoss Logging (Quarkus idiomatic) instead of SLF4J
+- Added "CosmosDB Compatibility" section to `transactions.adoc`
+
 ### Changed
 - **BREAKING:** Config prefix changed from `morphium.*` to `quarkus.morphium.*` to follow
   Quarkus extension conventions. Rename all `morphium.` properties in your

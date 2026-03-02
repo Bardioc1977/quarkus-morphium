@@ -24,6 +24,7 @@ an actively maintained MongoDB ORM for Java.
 - **GraalVM native ready** – all `@Entity` and `@Embedded` classes are registered for reflection at build time; no manual `reflect-config.json` entries needed
 - **Test-friendly** – use `quarkus.morphium.driver-name=InMemDriver` in your test profile for fast, in-process tests without a running MongoDB
 - **Clean JDK 25 implementation** – no `sun.*` imports, no `Unsafe` access, no `--add-opens` for internal APIs
+- **CosmosDB compatibility** – `@MorphiumTransactional` gracefully degrades on Azure CosmosDB (auto-detected); individual ops remain atomic, only multi-document rollback is unavailable
 - **Graceful shutdown** – `Morphium.close()` is called automatically when the application stops
 
 ## Prerequisites
