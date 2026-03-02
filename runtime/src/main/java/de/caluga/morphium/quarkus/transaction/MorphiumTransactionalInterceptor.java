@@ -19,7 +19,6 @@ import org.jboss.logging.Logger;
 
 import de.caluga.morphium.Morphium;
 import de.caluga.morphium.quarkus.transaction.MorphiumTransactionEvent.Phase;
-import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.event.Event;
 import jakarta.inject.Inject;
 import jakarta.interceptor.AroundInvoke;
@@ -60,27 +59,37 @@ public class MorphiumTransactionalInterceptor {
     @MorphiumTxPhase(Phase.AFTER_ROLLBACK)
     Event<MorphiumTransactionEvent> afterRollback;
 
-    private boolean cosmosDb;
+    private volatile Boolean cosmosDb;
 
-    @PostConstruct
-    void init() {
-        try {
-            cosmosDb = morphium.getDriver().isCosmosDB();
-        } catch (Exception e) {
-            log.warnf("Could not determine if backend is CosmosDB; assuming standard MongoDB. Cause: %s", e.getMessage());
-            cosmosDb = false;
+    private boolean isCosmosDb() {
+        Boolean cached = cosmosDb;
+        if (cached != null) {
+            return cached;
         }
-        if (cosmosDb) {
-            log.warn("CosmosDB detected — @MorphiumTransactional methods will execute "
-                    + "WITHOUT transaction wrapping. Individual ops remain atomic; "
-                    + "multi-document rollback is unavailable.");
+        synchronized (this) {
+            if (cosmosDb != null) {
+                return cosmosDb;
+            }
+            try {
+                cosmosDb = morphium.getDriver().isCosmosDB();
+            } catch (Exception e) {
+                log.warnf("Could not determine if backend is CosmosDB; assuming standard MongoDB. Cause: %s",
+                        e.getMessage());
+                cosmosDb = false;
+            }
+            if (cosmosDb) {
+                log.warn("CosmosDB detected — @MorphiumTransactional methods will execute "
+                        + "WITHOUT transaction wrapping. Individual ops remain atomic; "
+                        + "multi-document rollback is unavailable.");
+            }
+            return cosmosDb;
         }
     }
 
     @AroundInvoke
     Object aroundInvoke(InvocationContext ctx) throws Exception {
         // CosmosDB: execute without transaction wrapping
-        if (cosmosDb) {
+        if (isCosmosDb()) {
             log.debugf("CosmosDB: @MorphiumTransactional on %s.%s executes WITHOUT transaction.",
                     ctx.getMethod().getDeclaringClass().getSimpleName(),
                     ctx.getMethod().getName());
@@ -90,7 +99,7 @@ public class MorphiumTransactionalInterceptor {
         try {
             morphium.startTransaction();
         } catch (UnsupportedOperationException e) {
-            // Defensive fallback: init() missed CosmosDB detection (e.g. driver not yet connected)
+            // Defensive fallback: detection missed CosmosDB (e.g. driver not yet connected at first check)
             cosmosDb = true;
             log.warn("startTransaction() threw UnsupportedOperationException — "
                     + "switching to CosmosDB mode for all future invocations.");
