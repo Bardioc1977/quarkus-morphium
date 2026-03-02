@@ -4,12 +4,12 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Quarkus](https://img.shields.io/badge/Quarkus-3.32.1-blue)](https://quarkus.io)
 [![Java](https://img.shields.io/badge/Java-21%2B-orange)](https://adoptium.net)
-[![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-brightgreen)](https://bardioc1977.github.io/quarkus-morphium/)
+[![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-brightgreen)](https://bardioc1977.github.io/quarkus-morphium/quarkus-morphium/dev/index.html)
 
 A [Quarkus](https://quarkus.io) CDI extension for [Morphium](https://github.com/sboesebeck/morphium),
 an actively maintained MongoDB ORM for Java.
 
-**[Read the full documentation](https://bardioc1977.github.io/quarkus-morphium/)**
+**[Read the full documentation](https://bardioc1977.github.io/quarkus-morphium/quarkus-morphium/dev/index.html)**
 
 ## Features
 
@@ -433,7 +433,7 @@ This project is licensed under the [Apache License 2.0](LICENSE).
 
 Comprehensive documentation is available as an Antora-generated site:
 
-**[quarkus-morphium Documentation](https://bardioc1977.github.io/quarkus-morphium/)**
+**[quarkus-morphium Documentation](https://bardioc1977.github.io/quarkus-morphium/quarkus-morphium/dev/index.html)**
 
 The documentation covers:
 - [Getting Started](https://bardioc1977.github.io/quarkus-morphium/quarkus-morphium/dev/getting-started.html) – installation, first entity, first query
