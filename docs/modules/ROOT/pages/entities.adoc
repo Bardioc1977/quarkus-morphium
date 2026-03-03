@@ -168,6 +168,108 @@ Cache behavior is controlled globally via `quarkus.morphium.cache.*` properties 
 xref:configuration.adoc[Configuration Reference]) and per-entity via `@Cache` attributes.
 For advanced caching patterns see the link:{morphium-docs-url}[Morphium core documentation].
 
+== @Reference
+
+Stores a link to another entity in a separate collection instead of embedding it inline. Morphium
+persists only the referenced entity's `_id` in the parent document and resolves it on load.
+
+[source,java]
+----
+import de.caluga.morphium.annotations.Reference;
+
+@Entity
+public class BlogPost {
+    @Id private MorphiumId id;
+
+    @Reference
+    private Author author;
+
+    @Reference(lazyLoading = true)
+    private Author reviewer;
+
+    @Reference(cascadeDelete = true)
+    private List<OrderItem> items;
+
+    @Reference(orphanRemoval = true)
+    private List<Tag> tags;
+}
+----
+
+.@Reference attributes
+[cols="2,1,5",options="header"]
+|===
+| Attribute | Default | Description
+
+| `automaticStore`
+| `true`
+| When `true`, Morphium automatically persists referenced objects that don't yet have an ID when
+the parent is stored. Set to `false` to control persistence order manually.
+
+| `lazyLoading`
+| `false`
+| When `true`, the referenced entity is not loaded from the database until a method on the proxy is
+called. Useful for rarely-accessed references or to break bidirectional deserialization cycles.
+
+| `cascadeDelete`
+| `false`
+| When `true`, deleting the parent entity also deletes the referenced entities. Only applies to
+entity-based `delete(Object)` calls, not query-based deletes. Circular cascade references are
+detected and do not cause infinite loops.
+
+| `orphanRemoval`
+| `false`
+| When `true`, updating the parent entity automatically deletes referenced entities that are no
+longer referenced. Only triggers on updates (entities with an existing ID), not on inserts.
+
+| `fieldName`
+| `.`
+| Override the MongoDB field name for the reference. Defaults to the Java field name.
+
+| `targetCollection`
+| `.`
+| Override the target collection for the referenced entity. Defaults to the entity's own collection.
+|===
+
+=== automaticStore (default: true)
+
+With the default `automaticStore = true`, you do not need to store referenced entities before
+storing the parent. Morphium handles this automatically:
+
+[source,java]
+----
+Author author = new Author();
+author.setName("Jane");
+// author has no ID yet — Morphium will store it automatically
+
+BlogPost post = new BlogPost();
+post.setAuthor(author);
+morphium.store(post); // author is auto-stored first, then post references author's new ID
+----
+
+Set `automaticStore = false` when you want to control persistence order manually:
+
+[source,java]
+----
+@Reference(automaticStore = false)
+private Author author;
+
+// Must store author explicitly first:
+morphium.store(author);
+post.setAuthor(author);
+morphium.store(post);
+----
+
+=== Circular references
+
+Morphium includes cycle detection for circular `@Reference` chains (e.g., A → B → A). If a cycle
+is detected during serialization, objects with IDs return a minimal `{_id: ...}` document; objects
+without IDs throw `IllegalStateException` with a clear error message.
+
+For bidirectional references, use `lazyLoading = true` on at least one side to prevent
+deserialization cycles.
+
+For more details see the link:{morphium-docs-url}[Morphium core documentation].
+
 == GraalVM Native Image
 
 All classes annotated with `@Entity` or `@Embedded` are automatically registered for GraalVM
