@@ -131,8 +131,10 @@ WARN  CosmosDB detected — @MorphiumTransactional methods will execute WITHOUT
 [NOTE]
 ====
 On CosmosDB, lifecycle events (`BEFORE_COMMIT`, `AFTER_COMMIT`, `AFTER_ROLLBACK`)
-are *not* fired because no transaction is active. Individual Morphium operations
-(`store`, `inc`, `set`, etc.) remain atomic at the document level.
+are still fired so that observers (outbox publishers, audit logging, cleanup, etc.)
+continue to work. The only difference is that there is no real transaction backing
+them — individual Morphium operations (`store`, `inc`, `set`, etc.) remain atomic
+at the document level, but multi-document rollback is unavailable.
 ====
 
 == Testing Transactions

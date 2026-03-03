@@ -33,8 +33,10 @@ import jakarta.interceptor.InvocationContext;
  *   <li>Fires {@link Phase#BEFORE_COMMIT} before committing.</li>
  *   <li>Fires {@link Phase#AFTER_COMMIT} after a successful commit.</li>
  *   <li>On exception: aborts, fires {@link Phase#AFTER_ROLLBACK}, re-throws.</li>
- *   <li>On CosmosDB: skips transaction wrapping entirely; the method executes
- *       directly. A one-time WARN is logged at startup and per-call at DEBUG.</li>
+ *   <li>On CosmosDB: skips transaction wrapping but still fires lifecycle events
+ *       ({@code BEFORE_COMMIT}/{@code AFTER_COMMIT} on success, {@code AFTER_ROLLBACK}
+ *       on exception) so that observers continue to work. A one-time WARN is logged
+ *       at startup and per-call at DEBUG.</li>
  * </ul>
  */
 @MorphiumTransactional
@@ -88,12 +90,12 @@ public class MorphiumTransactionalInterceptor {
 
     @AroundInvoke
     Object aroundInvoke(InvocationContext ctx) throws Exception {
-        // CosmosDB: execute without transaction wrapping
+        // CosmosDB: execute without transaction wrapping but still fire lifecycle events
         if (isCosmosDb()) {
             log.debugf("CosmosDB: @MorphiumTransactional on %s.%s executes WITHOUT transaction.",
                     ctx.getMethod().getDeclaringClass().getSimpleName(),
                     ctx.getMethod().getName());
-            return ctx.proceed();
+            return proceedWithEvents(ctx);
         }
 
         try {
@@ -103,7 +105,7 @@ public class MorphiumTransactionalInterceptor {
             cosmosDb = true;
             log.warn("startTransaction() threw UnsupportedOperationException — "
                     + "switching to CosmosDB mode for all future invocations.");
-            return ctx.proceed();
+            return proceedWithEvents(ctx);
         }
         try {
             Object result = ctx.proceed();
@@ -113,6 +115,22 @@ public class MorphiumTransactionalInterceptor {
             return result;
         } catch (Exception e) {
             morphium.abortTransaction();
+            afterRollback.fire(new MorphiumTransactionEvent(Phase.AFTER_ROLLBACK, e));
+            throw e;
+        }
+    }
+
+    /**
+     * Executes the intercepted method without transaction wrapping but fires
+     * the same lifecycle events so that observers (outbox, cleanup, etc.) still work.
+     */
+    private Object proceedWithEvents(InvocationContext ctx) throws Exception {
+        try {
+            Object result = ctx.proceed();
+            beforeCommit.fire(new MorphiumTransactionEvent(Phase.BEFORE_COMMIT));
+            afterCommit.fire(new MorphiumTransactionEvent(Phase.AFTER_COMMIT));
+            return result;
+        } catch (Exception e) {
             afterRollback.fire(new MorphiumTransactionEvent(Phase.AFTER_ROLLBACK, e));
             throw e;
         }
