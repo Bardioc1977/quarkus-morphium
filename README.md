@@ -6,6 +6,11 @@
 [![Java](https://img.shields.io/badge/Java-21%2B-orange)](https://adoptium.net)
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-brightgreen)](https://bardioc1977.github.io/quarkus-morphium/dev/index.html)
 
+> **Note:** This extension is built on the [Bardioc1977/morphium](https://github.com/Bardioc1977/morphium) fork
+> (currently **6.2.0-SNAPSHOT**). Fork improvements are being contributed back to the
+> upstream [sboesebeck/morphium](https://github.com/sboesebeck/morphium) project via pull requests and are
+> progressively merged. See also: [quarkus-morphium-showcase](https://github.com/Bardioc1977/quarkus-morphium-showcase).
+
 A [Quarkus](https://quarkus.io) CDI extension for [Morphium](https://github.com/sboesebeck/morphium),
 an actively maintained MongoDB ORM for Java.
 
@@ -33,7 +38,7 @@ an actively maintained MongoDB ORM for Java.
 |---|---|
 | Java | 21 |
 | Quarkus | 3.32.1 |
-| Morphium | 6.1.10 |
+| Morphium | 6.2.0-SNAPSHOT ([Bardioc1977/morphium](https://github.com/Bardioc1977/morphium)) |
 
 ## Installation
 
@@ -409,7 +414,7 @@ property, as `true` is the default).
 ## Building from source
 
 ```bash
-# Build and install locally (requires Morphium 6.1.10-SNAPSHOT)
+# Build and install locally (requires Morphium 6.2.0-SNAPSHOT from Bardioc1977/morphium)
 mvn install
 
 # Skip tests
