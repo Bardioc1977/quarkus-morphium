@@ -22,7 +22,8 @@ For a detailed list of all changes see [CHANGELOG.md](CHANGELOG.md).
 - Blocking call detection for Vert.x event-loop safety
 - GraalVM native image support (automatic reflection registration)
 - InMemDriver test profile for fast, container-free tests
-- CosmosDB compatibility — `@MorphiumTransactional` gracefully degrades on Azure CosmosDB
+- CosmosDB compatibility — `@MorphiumTransactional` gracefully degrades on Azure CosmosDB (all sovereign clouds)
+- `@Reference` cascade delete, orphan removal, and automatic bidirectional cycle detection
 - Comprehensive Antora documentation with GitHub Pages deployment
 
 ### Compatibility
