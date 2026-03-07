@@ -39,6 +39,11 @@ class MorphiumCrudTest {
     // Shared ID across ordered tests
     private static String storedId;
 
+    @AfterEach
+    void resetThreadLocals() {
+        morphium.resetThreadLocalOverrides();
+    }
+
     @Test
     @Order(1)
     @DisplayName("store() sets id and returns persisted entity")
