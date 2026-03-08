@@ -78,8 +78,13 @@ public class ProductService {
 | **@StaticMetamodel** | Auto-generated `Entity_` classes with `Attribute`, `SortableAttribute`, `TextAttribute` fields — type-safe field references |
 | **Build-time validation** | Entity fields, ID types, method signatures validated during `mvn compile` — fail fast, not at runtime |
 
+All Morphium ORM features work transparently through generated repositories: `@Version`
+(optimistic locking), `@CreationTime`/`@LastChange`, lifecycle callbacks (`@PreStore`,
+`@PostLoad`), `@Cache`, `@WriteBuffer`, and `@Reference` (lazy/eager) — because the
+generated implementation delegates to `morphium.store()`, `morphium.findById()` etc.
+
 The imperative Morphium API (`@Inject Morphium`) remains fully available for aggregation pipelines,
-bulk updates, atomic `inc`/`push`/`pull` operations, and anything beyond standard CRUD.
+bulk updates, atomic `inc`/`push`/`pull` operations, distinct queries, and anything beyond standard CRUD.
 
 ---
 
