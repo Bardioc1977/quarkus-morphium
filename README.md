@@ -68,7 +68,7 @@ public class ProductService {
 
 | Feature | Details |
 |---------|---------|
-| **CRUD** | `CrudRepository<T,K>`, `BasicRepository<T,K>`, `DataRepository<T,K>` — save, insert, update, delete, findById, findAll, existsById |
+| **CRUD** | `CrudRepository<T,K>`, `BasicRepository<T,K>`, `DataRepository<T,K>`, `MorphiumRepository<T,K>` — save, insert, update, delete, findById, findAll, existsById |
 | **Query derivation** | `findBy`, `countBy`, `existsBy`, `deleteBy` with operators: Equals, Not, GreaterThan, LessThan, Between, In, NotIn, Like, StartsWith, EndsWith, Null, NotNull, True, False — combined with And/Or |
 | **@Find + @By** | Explicit field binding via parameter annotations, combined with `@Is(Operator)` for non-equality conditions |
 | **@Query (JDQL)** | Jakarta Data Query Language with WHERE, ORDER BY, named parameters (`:param`), comparison operators, BETWEEN, IN, LIKE, IS NULL |
@@ -83,8 +83,34 @@ All Morphium ORM features work transparently through generated repositories: `@V
 `@PostLoad`), `@Cache`, `@WriteBuffer`, and `@Reference` (lazy/eager) — because the
 generated implementation delegates to `morphium.store()`, `morphium.findById()` etc.
 
-The imperative Morphium API (`@Inject Morphium`) remains fully available for aggregation pipelines,
-bulk updates, atomic `inc`/`push`/`pull` operations, distinct queries, and anything beyond standard CRUD.
+### MorphiumRepository — The Escape Hatch
+
+`MorphiumRepository<T,K>` extends `CrudRepository` with Morphium-specific operations that
+have no equivalent in Jakarta Data 1.0:
+
+```java
+@Repository
+public interface ProductRepository extends MorphiumRepository<Product, MorphiumId> {
+
+    List<Product> findByCategory(String category);  // Jakarta Data query derivation
+}
+```
+
+```java
+// Distinct values for a field
+List<Object> categories = products.distinct("category");
+
+// Direct access to Morphium API for aggregation, atomic updates, etc.
+products.morphium().inc(product, "stock", 5);
+
+// Create a typed Morphium Query for complex conditions
+Query<Product> q = products.query();
+q.f("price").gt(100).f("category").eq("electronics");
+```
+
+All standard Jakarta Data features work exactly the same as with `CrudRepository`.
+The imperative Morphium API (`@Inject Morphium`) also remains fully available for
+aggregation pipelines, bulk updates, and anything beyond standard CRUD.
 
 ---
 

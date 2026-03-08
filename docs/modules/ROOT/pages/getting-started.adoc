@@ -82,7 +82,53 @@ reflection at build time — no manual `reflect-config.json` required.
 
 For a complete guide to annotations see xref:entities.adoc[Entities & Annotations].
 
-== Inject Morphium
+== Create a Repository (Jakarta Data)
+
+The recommended approach is to use Jakarta Data `@Repository` interfaces. The extension
+generates the implementation at build time:
+
+[source,java]
+----
+import de.caluga.morphium.driver.MorphiumId;
+import jakarta.data.repository.CrudRepository;
+import jakarta.data.repository.OrderBy;
+import jakarta.data.repository.Repository;
+import java.util.List;
+
+@Repository
+public interface ProductRepository extends CrudRepository<ProductEntity, String> {
+
+    List<ProductEntity> findByName(String name);
+
+    @OrderBy("price")
+    List<ProductEntity> findByPriceGreaterThan(double minPrice);
+}
+----
+
+[source,java]
+----
+@ApplicationScoped
+public class ProductService {
+
+    @Inject ProductRepository products;
+
+    public ProductEntity save(ProductEntity product) {
+        return products.save(product);
+    }
+
+    public List<ProductEntity> findByName(String name) {
+        return products.findByName(name);
+    }
+}
+----
+
+For the full Jakarta Data guide (query derivation, `@Find`/`@By`, JDQL, pagination,
+`MorphiumRepository`) see xref:jakarta-data.adoc[Jakarta Data 1.0].
+
+== Imperative API (Inject Morphium)
+
+For aggregation pipelines, atomic updates, and other operations beyond Jakarta Data,
+inject `Morphium` directly:
 
 [source,java]
 ----
@@ -90,39 +136,24 @@ import de.caluga.morphium.Morphium;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import java.util.List;
-import java.util.Optional;
 
 @ApplicationScoped
-public class ProductRepository {
+public class ProductAnalytics {
 
     @Inject
     Morphium morphium;
 
-    public ProductEntity save(ProductEntity product) {
-        morphium.store(product);   // sets id and version in-place
-        return product;
-    }
-
-    public Optional<ProductEntity> findByName(String name) {
-        return Optional.ofNullable(
-            morphium.createQueryFor(ProductEntity.class)
-                .f("name").eq(name)
-                .get()
-        );
-    }
-
     public List<ProductEntity> findAll() {
         return morphium.createQueryFor(ProductEntity.class).asList();
-    }
-
-    public void delete(ProductEntity product) {
-        morphium.delete(product);
     }
 }
 ----
 
 The `Morphium` instance is a CDI `@ApplicationScoped` bean — the extension manages its full
 lifecycle (connection setup, shutdown, hot-reload cache clearing).
+
+TIP: Both approaches work together. Use `MorphiumRepository` for the best of both worlds —
+standard CRUD via Jakarta Data plus `morphium()` and `query()` for the escape hatch.
 
 [[dev-services]]
 == Dev Services
@@ -133,6 +164,7 @@ for details.
 
 == Next Steps
 
+* xref:jakarta-data.adoc[Jakarta Data 1.0] — query derivation, `@Find`/`@By`, JDQL, pagination, `MorphiumRepository`
 * xref:configuration.adoc[Configuration Reference] — all `quarkus.morphium.*` properties
 * xref:entities.adoc[Entities & Annotations] — `@Entity`, `@Embedded`, `@Id`, `@Version`, lifecycle hooks
 * xref:transactions.adoc[Transactions] — declarative `@MorphiumTransactional`

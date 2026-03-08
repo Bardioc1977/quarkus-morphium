@@ -145,6 +145,22 @@ public abstract class AbstractMorphiumRepository<T, K> {
         return morphium.createQueryFor(entityClass());
     }
 
+    // -- MorphiumRepository operations ----------------------------------------
+
+    @SuppressWarnings("unchecked")
+    public List<Object> doDistinct(String fieldName) {
+        String mongoField = resolveMongoField(fieldName);
+        return (List<Object>) (List<?>) morphium.createQueryFor(entityClass()).distinct(mongoField);
+    }
+
+    public Morphium doMorphium() {
+        return morphium;
+    }
+
+    public Query<T> doQuery() {
+        return morphium.createQueryFor(entityClass());
+    }
+
     @SuppressWarnings("unchecked")
     private String resolveMongoField(String javaFieldName) {
         try {

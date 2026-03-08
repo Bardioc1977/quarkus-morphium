@@ -3,11 +3,40 @@
 include::./includes/attributes.adoc[]
 
 The Quarkus Morphium extension integrates link:{morphium-github-url}[Morphium], an actively
-maintained MongoDB ORM for Java, into Quarkus via CDI.
+maintained MongoDB ORM for Java, into Quarkus via CDI — with full
+link:https://jakarta.ee/specifications/data/1.0/[**Jakarta Data 1.0**] support.
+
+== Jakarta Data 1.0 — Declarative Repositories for MongoDB
+
+Define a `@Repository` interface, inject it, done. The implementation is generated at **build time**
+via Gizmo bytecode generation — no runtime reflection, no proxies, GraalVM native-image compatible.
+
+[source,java]
+----
+@Repository
+public interface ProductRepository extends MorphiumRepository<Product, MorphiumId> {
+
+    List<Product> findByCategory(String category);
+
+    @OrderBy("price")
+    List<Product> findByPriceBetween(double min, double max);
+}
+----
+
+Supports: query derivation (`findBy`, `countBy`, `existsBy`, `deleteBy`), `@Find`/`@By`,
+`@Query` with JDQL, `@OrderBy`, pagination (`Page`, `PageRequest`), sorting (`Sort`, `Order`),
+and auto-generated `@StaticMetamodel` classes.
+
+All Morphium ORM features (`@Version`, `@CreationTime`, `@PreStore`, `@Cache`, `@Reference`)
+work transparently through repositories.
+
+For the full guide see xref:jakarta-data.adoc[Jakarta Data 1.0].
 
 == Features
 
-* *Zero-boilerplate injection* – inject `Morphium` directly via `@Inject`; the extension manages the full lifecycle
+* *Jakarta Data 1.0* – `@Repository` interfaces with query derivation, `@Find`/`@By`, `@Query`/JDQL, pagination, `@StaticMetamodel`
+* *MorphiumRepository* – provider-specific extension with `distinct()`, `morphium()`, `query()` escape hatch
+* *Zero-boilerplate injection* – inject `Morphium` or any `@Repository` interface directly via `@Inject`
 * *Declarative transactions* – `@MorphiumTransactional` for automatic commit / rollback with CDI lifecycle events
 * *Type-safe configuration* – all settings live under the `quarkus.morphium.*` prefix in `application.properties`
 * *Dev Services* – a MongoDB container is started automatically in dev and test mode; no manual Docker setup needed
@@ -24,6 +53,9 @@ maintained MongoDB ORM for Java, into Quarkus via CDI.
 |===
 | xref:getting-started.adoc[Getting Started]
 | Installation, minimal configuration, first entity, first query.
+
+| xref:jakarta-data.adoc[Jakarta Data 1.0]
+| `@Repository`, `CrudRepository`, `MorphiumRepository`, query derivation, `@Find`/`@By`, `@Query`/JDQL, pagination, `@StaticMetamodel`.
 
 | xref:configuration.adoc[Configuration Reference]
 | All `quarkus.morphium.*` properties including SSL/TLS, Dev Services, and health checks.

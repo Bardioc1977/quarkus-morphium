@@ -39,6 +39,7 @@ import org.jboss.jandex.TypeVariable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.Modifier;
 import java.util.*;
 import java.util.stream.Stream;
 
@@ -61,6 +62,8 @@ public class MorphiumDataProcessor {
             "jakarta.data.repository.BasicRepository");
     private static final DotName CRUD_REPOSITORY = DotName.createSimple(
             "jakarta.data.repository.CrudRepository");
+    private static final DotName MORPHIUM_REPOSITORY = DotName.createSimple(
+            "de.caluga.morphium.quarkus.data.MorphiumRepository");
     private static final DotName ENTITY_ANNOTATION = DotName.createSimple(
             "de.caluga.morphium.annotations.Entity");
     private static final DotName ID_ANNOTATION = DotName.createSimple(
@@ -123,7 +126,8 @@ public class MorphiumDataProcessor {
     // Standard CRUD/Basic method names that are handled by delegation
     private static final Set<String> CRUD_METHODS = Set.of(
             "findById", "findAll", "save", "saveAll", "delete", "deleteById", "deleteAll",
-            "insert", "insertAll", "update", "updateAll");
+            "insert", "insertAll", "update", "updateAll",
+            "distinct", "morphium", "query");
 
     // -----------------------------------------------------------------
     // Step 1: Discover @Repository interfaces
@@ -254,23 +258,23 @@ public class MorphiumDataProcessor {
             // Generate String constants (public static final String FIELD_NAME = "javaName")
             for (MetamodelField mf : fields) {
                 FieldCreator fc = cc.getFieldCreator(mf.constantName, String.class);
-                fc.setModifiers(java.lang.reflect.Modifier.PUBLIC
-                        | java.lang.reflect.Modifier.STATIC
-                        | java.lang.reflect.Modifier.FINAL);
+                fc.setModifiers(Modifier.PUBLIC
+                        | Modifier.STATIC
+                        | Modifier.FINAL);
             }
 
             // Generate Attribute fields (public static final XxxAttribute<Entity> field)
             for (MetamodelField mf : fields) {
                 String attributeType = mf.attributeInterfaceType();
                 FieldCreator fc = cc.getFieldCreator(mf.javaName, attributeType);
-                fc.setModifiers(java.lang.reflect.Modifier.PUBLIC
-                        | java.lang.reflect.Modifier.STATIC
-                        | java.lang.reflect.Modifier.FINAL);
+                fc.setModifiers(Modifier.PUBLIC
+                        | Modifier.STATIC
+                        | Modifier.FINAL);
             }
 
             // Generate static initializer <clinit>
             try (MethodCreator clinit = cc.getMethodCreator("<clinit>", void.class)) {
-                clinit.setModifiers(java.lang.reflect.Modifier.STATIC);
+                clinit.setModifiers(Modifier.STATIC);
 
                 for (MetamodelField mf : fields) {
                     // Assign String constant: FIELD_NAME = "javaName"
@@ -329,8 +333,8 @@ public class MorphiumDataProcessor {
         while (current != null) {
             for (FieldInfo field : current.fields()) {
                 // Skip static, transient, and @Transient fields
-                if (java.lang.reflect.Modifier.isStatic(field.flags())) continue;
-                if (java.lang.reflect.Modifier.isTransient(field.flags())) continue;
+                if (Modifier.isStatic(field.flags())) continue;
+                if (Modifier.isTransient(field.flags())) continue;
                 if (field.hasAnnotation(TRANSIENT_ANNOTATION)) continue;
 
                 String javaName = field.name();
@@ -396,7 +400,8 @@ public class MorphiumDataProcessor {
 
         // Determine which level of the repository hierarchy this implements
         ClassInfo repoInterface = index.getClassByName(DotName.createSimple(repo.getInterfaceName()));
-        boolean isCrud = implementsInterface(repoInterface, CRUD_REPOSITORY, index);
+        boolean isMorphium = implementsInterface(repoInterface, MORPHIUM_REPOSITORY, index);
+        boolean isCrud = isMorphium || implementsInterface(repoInterface, CRUD_REPOSITORY, index);
         boolean isBasic = isCrud || implementsInterface(repoInterface, BASIC_REPOSITORY, index);
 
         String superClass = AbstractMorphiumRepository.class.getName();
@@ -436,7 +441,14 @@ public class MorphiumDataProcessor {
                 generateUpdateAll(cc);
             }
 
-            // Custom query methods (Phase 2: query derivation)
+            // MorphiumRepository methods
+            if (isMorphium) {
+                generateDistinct(cc);
+                generateMorphium(cc);
+                generateQuery(cc);
+            }
+
+            // Custom query methods
             if (repoInterface != null) {
                 Set<String> entityFields = collectEntityFields(
                         index.getClassByName(DotName.createSimple(entityClassName)), index);
@@ -458,7 +470,7 @@ public class MorphiumDataProcessor {
                                      String idClassName,
                                      String idFieldName) {
         try (MethodCreator ctor = cc.getMethodCreator("<init>", void.class)) {
-            ctor.setModifiers(java.lang.reflect.Modifier.PUBLIC);
+            ctor.setModifiers(Modifier.PUBLIC);
 
             ResultHandle entityClass = ctor.loadClassFromTCCL(entityClassName);
             ResultHandle idClass = ctor.loadClassFromTCCL(idClassName);
@@ -484,7 +496,7 @@ public class MorphiumDataProcessor {
     private void generateFindById(ClassCreator cc) {
         // Optional<T> findById(K id)
         try (MethodCreator mc = cc.getMethodCreator("findById", Optional.class, Object.class)) {
-            mc.setModifiers(java.lang.reflect.Modifier.PUBLIC);
+            mc.setModifiers(Modifier.PUBLIC);
             ResultHandle result = mc.invokeVirtualMethod(
                     MethodDescriptor.ofMethod(AbstractMorphiumRepository.class,
                             "doFindById", Optional.class, Object.class),
@@ -496,7 +508,7 @@ public class MorphiumDataProcessor {
     private void generateFindAll(ClassCreator cc) {
         // Stream<T> findAll()
         try (MethodCreator mc = cc.getMethodCreator("findAll", Stream.class)) {
-            mc.setModifiers(java.lang.reflect.Modifier.PUBLIC);
+            mc.setModifiers(Modifier.PUBLIC);
             ResultHandle result = mc.invokeVirtualMethod(
                     MethodDescriptor.ofMethod(AbstractMorphiumRepository.class,
                             "doFindAll", Stream.class),
@@ -512,7 +524,7 @@ public class MorphiumDataProcessor {
         String orderClass = "jakarta.data.Order";
         try (MethodCreator mc = cc.getMethodCreator("findAll", pageClass,
                 pageRequestClass, orderClass)) {
-            mc.setModifiers(java.lang.reflect.Modifier.PUBLIC);
+            mc.setModifiers(Modifier.PUBLIC);
             ResultHandle result = mc.invokeVirtualMethod(
                     MethodDescriptor.ofMethod(AbstractMorphiumRepository.class,
                             "doFindAllPaged", "jakarta.data.page.Page",
@@ -525,7 +537,7 @@ public class MorphiumDataProcessor {
     private void generateSave(ClassCreator cc) {
         // <S extends T> S save(S entity)
         try (MethodCreator mc = cc.getMethodCreator("save", Object.class, Object.class)) {
-            mc.setModifiers(java.lang.reflect.Modifier.PUBLIC);
+            mc.setModifiers(Modifier.PUBLIC);
             ResultHandle result = mc.invokeVirtualMethod(
                     MethodDescriptor.ofMethod(AbstractMorphiumRepository.class,
                             "doSave", Object.class, Object.class),
@@ -537,7 +549,7 @@ public class MorphiumDataProcessor {
     private void generateSaveAll(ClassCreator cc) {
         // <S extends T> List<S> saveAll(List<S> entities)
         try (MethodCreator mc = cc.getMethodCreator("saveAll", List.class, List.class)) {
-            mc.setModifiers(java.lang.reflect.Modifier.PUBLIC);
+            mc.setModifiers(Modifier.PUBLIC);
             ResultHandle result = mc.invokeVirtualMethod(
                     MethodDescriptor.ofMethod(AbstractMorphiumRepository.class,
                             "doSaveAll", List.class, List.class),
@@ -549,7 +561,7 @@ public class MorphiumDataProcessor {
     private void generateDelete(ClassCreator cc) {
         // void delete(T entity)
         try (MethodCreator mc = cc.getMethodCreator("delete", void.class, Object.class)) {
-            mc.setModifiers(java.lang.reflect.Modifier.PUBLIC);
+            mc.setModifiers(Modifier.PUBLIC);
             mc.invokeVirtualMethod(
                     MethodDescriptor.ofMethod(AbstractMorphiumRepository.class,
                             "doDelete", void.class, Object.class),
@@ -561,7 +573,7 @@ public class MorphiumDataProcessor {
     private void generateDeleteById(ClassCreator cc) {
         // void deleteById(K id)
         try (MethodCreator mc = cc.getMethodCreator("deleteById", void.class, Object.class)) {
-            mc.setModifiers(java.lang.reflect.Modifier.PUBLIC);
+            mc.setModifiers(Modifier.PUBLIC);
             mc.invokeVirtualMethod(
                     MethodDescriptor.ofMethod(AbstractMorphiumRepository.class,
                             "doDeleteById", void.class, Object.class),
@@ -573,7 +585,7 @@ public class MorphiumDataProcessor {
     private void generateDeleteAll(ClassCreator cc) {
         // void deleteAll(List<? extends T> entities)
         try (MethodCreator mc = cc.getMethodCreator("deleteAll", void.class, List.class)) {
-            mc.setModifiers(java.lang.reflect.Modifier.PUBLIC);
+            mc.setModifiers(Modifier.PUBLIC);
             mc.invokeVirtualMethod(
                     MethodDescriptor.ofMethod(AbstractMorphiumRepository.class,
                             "doDeleteAll", void.class, List.class),
@@ -586,7 +598,7 @@ public class MorphiumDataProcessor {
 
     private void generateInsert(ClassCreator cc) {
         try (MethodCreator mc = cc.getMethodCreator("insert", Object.class, Object.class)) {
-            mc.setModifiers(java.lang.reflect.Modifier.PUBLIC);
+            mc.setModifiers(Modifier.PUBLIC);
             ResultHandle result = mc.invokeVirtualMethod(
                     MethodDescriptor.ofMethod(AbstractMorphiumRepository.class,
                             "doInsert", Object.class, Object.class),
@@ -597,7 +609,7 @@ public class MorphiumDataProcessor {
 
     private void generateInsertAll(ClassCreator cc) {
         try (MethodCreator mc = cc.getMethodCreator("insertAll", List.class, List.class)) {
-            mc.setModifiers(java.lang.reflect.Modifier.PUBLIC);
+            mc.setModifiers(Modifier.PUBLIC);
             ResultHandle result = mc.invokeVirtualMethod(
                     MethodDescriptor.ofMethod(AbstractMorphiumRepository.class,
                             "doInsertAll", List.class, List.class),
@@ -608,7 +620,7 @@ public class MorphiumDataProcessor {
 
     private void generateUpdate(ClassCreator cc) {
         try (MethodCreator mc = cc.getMethodCreator("update", Object.class, Object.class)) {
-            mc.setModifiers(java.lang.reflect.Modifier.PUBLIC);
+            mc.setModifiers(Modifier.PUBLIC);
             ResultHandle result = mc.invokeVirtualMethod(
                     MethodDescriptor.ofMethod(AbstractMorphiumRepository.class,
                             "doUpdate", Object.class, Object.class),
@@ -619,7 +631,7 @@ public class MorphiumDataProcessor {
 
     private void generateUpdateAll(ClassCreator cc) {
         try (MethodCreator mc = cc.getMethodCreator("updateAll", List.class, List.class)) {
-            mc.setModifiers(java.lang.reflect.Modifier.PUBLIC);
+            mc.setModifiers(Modifier.PUBLIC);
             ResultHandle result = mc.invokeVirtualMethod(
                     MethodDescriptor.ofMethod(AbstractMorphiumRepository.class,
                             "doUpdateAll", List.class, List.class),
@@ -628,8 +640,48 @@ public class MorphiumDataProcessor {
         }
     }
 
+    // -- MorphiumRepository method generation --
+
+    private void generateDistinct(ClassCreator cc) {
+        // List<Object> distinct(String fieldName)
+        try (MethodCreator mc = cc.getMethodCreator("distinct", List.class, String.class)) {
+            mc.setModifiers(Modifier.PUBLIC);
+            ResultHandle result = mc.invokeVirtualMethod(
+                    MethodDescriptor.ofMethod(AbstractMorphiumRepository.class,
+                            "doDistinct", List.class, String.class),
+                    mc.getThis(), mc.getMethodParam(0));
+            mc.returnValue(result);
+        }
+    }
+
+    private void generateMorphium(ClassCreator cc) {
+        // Morphium morphium()
+        try (MethodCreator mc = cc.getMethodCreator("morphium",
+                "de.caluga.morphium.Morphium")) {
+            mc.setModifiers(Modifier.PUBLIC);
+            ResultHandle result = mc.invokeVirtualMethod(
+                    MethodDescriptor.ofMethod(AbstractMorphiumRepository.class,
+                            "doMorphium", "de.caluga.morphium.Morphium"),
+                    mc.getThis());
+            mc.returnValue(result);
+        }
+    }
+
+    private void generateQuery(ClassCreator cc) {
+        // Query<T> query()
+        try (MethodCreator mc = cc.getMethodCreator("query",
+                "de.caluga.morphium.query.Query")) {
+            mc.setModifiers(Modifier.PUBLIC);
+            ResultHandle result = mc.invokeVirtualMethod(
+                    MethodDescriptor.ofMethod(AbstractMorphiumRepository.class,
+                            "doQuery", "de.caluga.morphium.query.Query"),
+                    mc.getThis());
+            mc.returnValue(result);
+        }
+    }
+
     // -----------------------------------------------------------------
-    // Phase 2: Custom query method generation
+    // Custom query method generation
     // -----------------------------------------------------------------
 
     private void generateCustomQueryMethods(ClassCreator cc,
@@ -643,7 +695,7 @@ public class MorphiumDataProcessor {
             // Skip standard CRUD methods and default/static methods
             if (CRUD_METHODS.contains(name)) continue;
             if (method.isDefault()) continue;
-            if (java.lang.reflect.Modifier.isStatic(method.flags())) continue;
+            if (Modifier.isStatic(method.flags())) continue;
 
             // Phase 5: @Query with JDQL
             if (method.hasAnnotation(QUERY_ANNOTATION)) {
@@ -712,7 +764,7 @@ public class MorphiumDataProcessor {
         try (MethodCreator mc = cc.getMethodCreator(
                 MethodDescriptor.ofMethod(cc.getClassName(), methodName,
                         returnTypeName, paramTypeNames))) {
-            mc.setModifiers(java.lang.reflect.Modifier.PUBLIC);
+            mc.setModifiers(Modifier.PUBLIC);
 
             // Build args array: Object[] args = new Object[] { param0, param1, ... }
             ResultHandle argsArray = mc.newArray(Object.class, mc.load(method.parametersCount()));
@@ -881,7 +933,7 @@ public class MorphiumDataProcessor {
         try (MethodCreator mc = cc.getMethodCreator(
                 MethodDescriptor.ofMethod(cc.getClassName(), method.name(),
                         returnTypeName, paramTypeNames))) {
-            mc.setModifiers(java.lang.reflect.Modifier.PUBLIC);
+            mc.setModifiers(Modifier.PUBLIC);
 
             // Build args array
             ResultHandle argsArray = mc.newArray(Object.class, mc.load(method.parametersCount()));
@@ -954,7 +1006,7 @@ public class MorphiumDataProcessor {
             try (MethodCreator mc = cc.getMethodCreator(
                     MethodDescriptor.ofMethod(cc.getClassName(), method.name(),
                             returnTypeName, paramTypeNames))) {
-                mc.setModifiers(java.lang.reflect.Modifier.PUBLIC);
+                mc.setModifiers(Modifier.PUBLIC);
 
                 ResultHandle argsArray = mc.newArray(Object.class, mc.load(method.parametersCount()));
                 for (int i = 0; i < method.parametersCount(); i++) {
@@ -983,7 +1035,7 @@ public class MorphiumDataProcessor {
             try (MethodCreator mc = cc.getMethodCreator(
                     MethodDescriptor.ofMethod(cc.getClassName(), method.name(),
                             returnTypeName, paramTypeNames))) {
-                mc.setModifiers(java.lang.reflect.Modifier.PUBLIC);
+                mc.setModifiers(Modifier.PUBLIC);
                 mc.invokeVirtualMethod(
                         MethodDescriptor.ofMethod(AbstractMorphiumRepository.class,
                                 "doDelete", void.class, Object.class),
@@ -1010,7 +1062,7 @@ public class MorphiumDataProcessor {
         try (MethodCreator mc = cc.getMethodCreator(
                 MethodDescriptor.ofMethod(cc.getClassName(), method.name(),
                         returnTypeName, paramTypeNames))) {
-            mc.setModifiers(java.lang.reflect.Modifier.PUBLIC);
+            mc.setModifiers(Modifier.PUBLIC);
 
             if (isList) {
                 ResultHandle result = mc.invokeVirtualMethod(
@@ -1045,7 +1097,7 @@ public class MorphiumDataProcessor {
         try (MethodCreator mc = cc.getMethodCreator(
                 MethodDescriptor.ofMethod(cc.getClassName(), method.name(),
                         returnTypeName, paramTypeNames))) {
-            mc.setModifiers(java.lang.reflect.Modifier.PUBLIC);
+            mc.setModifiers(Modifier.PUBLIC);
 
             if (isList) {
                 ResultHandle result = mc.invokeVirtualMethod(
@@ -1080,7 +1132,7 @@ public class MorphiumDataProcessor {
         try (MethodCreator mc = cc.getMethodCreator(
                 MethodDescriptor.ofMethod(cc.getClassName(), method.name(),
                         returnTypeName, paramTypeNames))) {
-            mc.setModifiers(java.lang.reflect.Modifier.PUBLIC);
+            mc.setModifiers(Modifier.PUBLIC);
 
             if (isList) {
                 ResultHandle result = mc.invokeVirtualMethod(
@@ -1207,7 +1259,7 @@ public class MorphiumDataProcessor {
         try (MethodCreator mc = cc.getMethodCreator(
                 MethodDescriptor.ofMethod(cc.getClassName(), method.name(),
                         returnTypeName, paramTypeNames))) {
-            mc.setModifiers(java.lang.reflect.Modifier.PUBLIC);
+            mc.setModifiers(Modifier.PUBLIC);
 
             // Build args array
             ResultHandle argsArray = mc.newArray(Object.class, mc.load(method.parametersCount()));
@@ -1272,7 +1324,7 @@ public class MorphiumDataProcessor {
             ParameterizedType pt = type.asParameterizedType();
             DotName name = pt.name();
             if (name.equals(BASIC_REPOSITORY) || name.equals(CRUD_REPOSITORY)
-                    || name.equals(DATA_REPOSITORY)) {
+                    || name.equals(DATA_REPOSITORY) || name.equals(MORPHIUM_REPOSITORY)) {
                 if (pt.arguments().size() >= 2) {
                     DotName entityType = pt.arguments().get(0).name();
                     DotName idType = pt.arguments().get(1).name();
@@ -1354,8 +1406,8 @@ public class MorphiumDataProcessor {
         ClassInfo current = entityClass;
         while (current != null) {
             for (FieldInfo field : current.fields()) {
-                if (!java.lang.reflect.Modifier.isStatic(field.flags())
-                        && !java.lang.reflect.Modifier.isTransient(field.flags())) {
+                if (!Modifier.isStatic(field.flags())
+                        && !Modifier.isTransient(field.flags())) {
                     fields.add(field.name());
                 }
             }

@@ -20,8 +20,6 @@ import java.util.List;
 @Repository
 public interface ItemRepository extends CrudRepository<ItemEntity, String> {
 
-    // -- Phase 2: Query derivation methods --
-
     List<ItemEntity> findByName(String name);
 
     List<ItemEntity> findByPriceGreaterThan(double minPrice);
@@ -29,8 +27,6 @@ public interface ItemRepository extends CrudRepository<ItemEntity, String> {
     long countByTag(String tag);
 
     boolean existsByName(String name);
-
-    // -- Phase 4: @Find / @By annotation-based methods --
 
     @Find
     List<ItemEntity> searchByTag(@By("tag") String tag);
@@ -49,12 +45,8 @@ public interface ItemRepository extends CrudRepository<ItemEntity, String> {
     @Find
     List<ItemEntity> findWithLimit(@By("tag") String tag, Limit limit);
 
-    // -- Phase 4: @Delete annotation --
-
     @Delete
     void removeByTag(@By("tag") String tag);
-
-    // -- Phase 4: @Insert / @Save / @Update annotations --
 
     @Insert
     ItemEntity addItem(ItemEntity item);
