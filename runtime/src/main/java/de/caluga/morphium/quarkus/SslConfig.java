@@ -24,19 +24,19 @@ import java.util.Optional;
  *
  * <h3>TLS-only (encrypted transport, server certificate validation):</h3>
  * <pre>{@code
- * morphium.ssl.enabled=true
- * morphium.ssl.truststore-path=/etc/certs/mongo-truststore.jks
- * morphium.ssl.truststore-password=changeit
+ * quarkus.morphium.ssl.enabled=true
+ * quarkus.morphium.ssl.truststore-path=/etc/certs/mongo-truststore.jks
+ * quarkus.morphium.ssl.truststore-password=changeit
  * }</pre>
  *
  * <h3>X.509 client-certificate authentication (MongoDB Atlas):</h3>
  * <pre>{@code
- * morphium.ssl.enabled=true
- * morphium.ssl.auth-mechanism=MONGODB-X509
- * morphium.ssl.keystore-path=/etc/certs/client-keystore.p12
- * morphium.ssl.keystore-password=secret
- * morphium.ssl.truststore-path=/etc/certs/mongo-truststore.jks
- * morphium.ssl.truststore-password=changeit
+ * quarkus.morphium.ssl.enabled=true
+ * quarkus.morphium.ssl.auth-mechanism=MONGODB-X509
+ * quarkus.morphium.ssl.keystore-path=/etc/certs/client-keystore.p12
+ * quarkus.morphium.ssl.keystore-password=secret
+ * quarkus.morphium.ssl.truststore-path=/etc/certs/mongo-truststore.jks
+ * quarkus.morphium.ssl.truststore-password=changeit
  * # Optional – overrides the subject DN extracted from the certificate:
  * # morphium.ssl.x509-username=CN=myUser,O=myOrg,C=DE
  * }</pre>

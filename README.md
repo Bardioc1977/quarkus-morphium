@@ -4,6 +4,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Quarkus](https://img.shields.io/badge/Quarkus-3.32.1-blue)](https://quarkus.io)
 [![Java](https://img.shields.io/badge/Java-21%2B-orange)](https://adoptium.net)
+[![Jakarta Data](https://img.shields.io/badge/Jakarta%20Data-1.0-green)](https://jakarta.ee/specifications/data/1.0/)
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-brightgreen)](https://bardioc1977.github.io/quarkus-morphium/dev/index.html)
 
 > **Note:** This extension is built on the [Bardioc1977/morphium](https://github.com/Bardioc1977/morphium) fork
@@ -12,26 +13,104 @@
 > progressively merged. See also: [quarkus-morphium-showcase](https://github.com/Bardioc1977/quarkus-morphium-showcase).
 
 A [Quarkus](https://quarkus.io) CDI extension for [Morphium](https://github.com/sboesebeck/morphium),
-an actively maintained MongoDB ORM for Java.
+an actively maintained MongoDB ORM for Java — with full **Jakarta Data 1.0** support.
 
-**[Read the full documentation](https://bardioc1977.github.io/quarkus-morphium/dev/index.html)**
+**[Read the full documentation](https://bardioc1977.github.io/quarkus-morphium/dev/index.html)** | **[Live Showcase](https://github.com/Bardioc1977/quarkus-morphium-showcase)**
 
-## Features
+---
 
-- **Zero-boilerplate CDI integration** – inject `Morphium` directly via `@Inject`; the extension manages the lifecycle
-- **Declarative transactions** – annotate methods with `@MorphiumTransactional` for automatic commit/rollback, with CDI events for transaction lifecycle hooks
-- **Type-safe configuration** – all settings live in `application.properties` under the `quarkus.morphium.*` prefix
-- **Dev Services** – automatic MongoDB container in dev/test mode, with optional single-node replica set for transactions
-- **Health checks** – MicroProfile liveness, readiness, and startup probes with connection pool metadata
-- **SSL/TLS & X.509** – encrypted connections and client-certificate authentication via `quarkus.morphium.ssl.*`
-- **Dev UI card** – MongoDB connection info displayed in the Quarkus Dev UI at `/q/dev-ui/`
-- **Blocking call detection** – warns when Morphium writes are called from the Vert.x event loop
-- **GraalVM native ready** – all `@Entity` and `@Embedded` classes are registered for reflection at build time; no manual `reflect-config.json` entries needed
-- **Test-friendly** – use `quarkus.morphium.driver-name=InMemDriver` in your test profile for fast, in-process tests without a running MongoDB
-- **Clean JDK 25 implementation** – no `sun.*` imports, no `Unsafe` access, no `--add-opens` for internal APIs
-- **CosmosDB compatibility** – `@MorphiumTransactional` gracefully degrades on Azure CosmosDB (auto-detected via `BackendType`); supports all Azure sovereign clouds (Global, China/21Vianet, US Government, Germany); individual ops remain atomic, only multi-document rollback is unavailable
-- **@Reference cascade** – `cascadeDelete` and `orphanRemoval` on `@Reference` annotations; automatic cycle detection for both serialization and deserialization — bidirectional references work without `lazyLoading`
-- **Graceful shutdown** – `Morphium.close()` is called automatically when the application stops
+## Jakarta Data 1.0 — Declarative Repositories for MongoDB
+
+Define a `@Repository` interface, inject it, done. The extension generates the implementation
+at **Quarkus build time** via Gizmo bytecode generation — no runtime reflection, no proxies,
+GraalVM native-image compatible.
+
+```java
+@Repository
+public interface ProductRepository extends CrudRepository<Product, MorphiumId> {
+
+    List<Product> findByCategory(String category);
+
+    @OrderBy("price")
+    List<Product> findByPriceBetween(double min, double max);
+
+    long countByCategory(String category);
+
+    boolean existsByName(String name);
+
+    Page<Product> findByCategory(String category, PageRequest page);
+
+    @Find
+    List<Product> search(@By("category") String cat,
+                         @By("price") @Is(GreaterThanEqual) double minPrice,
+                         Sort<Product> sort);
+
+    @Query("WHERE category = :cat AND price > :minPrice ORDER BY price")
+    List<Product> findExpensive(@Param("cat") String category,
+                                @Param("minPrice") double minPrice);
+}
+```
+
+```java
+@ApplicationScoped
+public class ProductService {
+
+    @Inject ProductRepository products;
+
+    public Page<Product> browse(int page, int size) {
+        return products.findByCategory("electronics",
+            PageRequest.ofPage(page, size, true));
+    }
+}
+```
+
+### What's supported
+
+| Feature | Details |
+|---------|---------|
+| **CRUD** | `CrudRepository<T,K>`, `BasicRepository<T,K>`, `DataRepository<T,K>` — save, insert, update, delete, findById, findAll, existsById |
+| **Query derivation** | `findBy`, `countBy`, `existsBy`, `deleteBy` with operators: Equals, Not, GreaterThan, LessThan, Between, In, NotIn, Like, StartsWith, EndsWith, Null, NotNull, True, False — combined with And/Or |
+| **@Find + @By** | Explicit field binding via parameter annotations, combined with `@Is(Operator)` for non-equality conditions |
+| **@Query (JDQL)** | Jakarta Data Query Language with WHERE, ORDER BY, named parameters (`:param`), comparison operators, BETWEEN, IN, LIKE, IS NULL |
+| **@OrderBy** | Static sort annotation on query methods |
+| **Pagination** | `Page<T>`, `PageRequest` with total counts, `Limit` |
+| **Sorting** | `Sort<T>`, `Order<T>` as method parameters |
+| **@StaticMetamodel** | Auto-generated `Entity_` classes with `Attribute`, `SortableAttribute`, `TextAttribute` fields — type-safe field references |
+| **Build-time validation** | Entity fields, ID types, method signatures validated during `mvn compile` — fail fast, not at runtime |
+
+The imperative Morphium API (`@Inject Morphium`) remains fully available for aggregation pipelines,
+bulk updates, atomic `inc`/`push`/`pull` operations, and anything beyond standard CRUD.
+
+---
+
+## All Features
+
+### CDI & Lifecycle
+- **Zero-boilerplate CDI integration** — inject `Morphium` or any `@Repository` interface directly via `@Inject`
+- **Declarative transactions** — `@MorphiumTransactional` with automatic commit/rollback and CDI lifecycle events (`BEFORE_COMMIT`, `AFTER_COMMIT`, `AFTER_ROLLBACK`)
+- **Graceful shutdown** — `Morphium.close()` called automatically on application stop
+
+### Developer Experience
+- **Type-safe configuration** — all settings under `quarkus.morphium.*` in `application.properties`
+- **Dev Services** — automatic MongoDB container in dev/test mode via Testcontainers, with optional single-node replica set for transactions
+- **Dev UI card** — MongoDB connection info in the Quarkus Dev UI at `/q/dev-ui/`
+- **Test-friendly** — `quarkus.morphium.driver-name=InMemDriver` for fast, in-process tests without Docker
+- **Blocking call detection** — warns when Morphium writes happen on the Vert.x event loop
+
+### Production
+- **Health checks** — MicroProfile liveness, readiness, and startup probes with connection pool metadata
+- **SSL/TLS & X.509** — encrypted connections and client-certificate authentication via `quarkus.morphium.ssl.*`
+- **GraalVM native ready** — all `@Entity` and `@Embedded` classes registered for reflection at build time
+- **CosmosDB compatibility** — `@MorphiumTransactional` gracefully degrades on Azure CosmosDB (auto-detected); supports all Azure sovereign clouds
+
+### Morphium ORM
+- **@Reference cascade** — `cascadeDelete` and `orphanRemoval` with automatic cycle detection for bidirectional references
+- **Built-in caching** — `@Cache` and `@WriteBuffer` annotations for read cache and async write batching
+- **Lifecycle hooks** — `@PreStore`, `@PostStore`, `@PostLoad` etc. on `@Entity` classes
+- **Optimistic locking** — `@Version` for concurrent modification detection
+- **Schema evolution** — `@Aliases` for legacy field name compatibility
+
+---
 
 ## Prerequisites
 
@@ -93,178 +172,121 @@ GitHub Packages requires authentication even for public packages. Create a
 </servers>
 ```
 
-## Configuration
+## Quick Start
 
-Add the following to `src/main/resources/application.properties`:
+### 1. Configure
 
 ```properties
 # Required
 quarkus.morphium.database=my-database
 
-# MongoDB hosts (comma-separated host:port pairs, default: localhost:27017)
+# MongoDB hosts (default: localhost:27017)
 quarkus.morphium.hosts=mongo1:27017,mongo2:27017
 
-# Credentials (optional)
-quarkus.morphium.username=admin
-quarkus.morphium.password=secret
-quarkus.morphium.auth-database=admin
-
-# Connection pool (default: 250)
-quarkus.morphium.max-connections=100
-
-# MongoDB Atlas – overrides quarkus.morphium.hosts when present
-# quarkus.morphium.atlas-url=mongodb+srv://user:pass@cluster.mongodb.net/
-
-# Read preference: primary | primaryPreferred | secondary | secondaryPreferred | nearest
-quarkus.morphium.read-preference=primary
-
-# Automatically create/verify indexes on startup (default: true)
-quarkus.morphium.create-indexes=true
-
-# Morphium driver: PooledDriver (production) | InMemDriver (tests)
-quarkus.morphium.driver-name=PooledDriver
-
-# Query result cache
-quarkus.morphium.cache.read-cache-enabled=true
-quarkus.morphium.cache.global-valid-time=60000
-
-# LocalDateTime storage format (default: true = BSON ISODate)
-# Set to false only when reading data written by legacy Morphium (Map format {sec, n})
-quarkus.morphium.local-date-time.use-bson-date=true
+# Or use Dev Services — no config needed, MongoDB starts automatically
 ```
 
-### Full configuration reference
+### 2. Define an entity
+
+```java
+@Entity(collectionName = "products")
+@Data @NoArgsConstructor
+public class Product {
+    @Id private MorphiumId id;
+    private String name;
+    private double price;
+    private String category;
+    @Version private long version;
+}
+```
+
+### 3. Create a repository
+
+```java
+@Repository
+public interface ProductRepository extends CrudRepository<Product, MorphiumId> {
+
+    List<Product> findByCategory(String category);
+
+    @OrderBy("price")
+    List<Product> findByPriceGreaterThan(double minPrice);
+}
+```
+
+### 4. Use it
+
+```java
+@ApplicationScoped
+public class ProductService {
+
+    @Inject ProductRepository products;
+
+    public Product create(String name, double price, String category) {
+        var product = new Product();
+        product.setName(name);
+        product.setPrice(price);
+        product.setCategory(category);
+        return products.insert(product);
+    }
+
+    public List<Product> findExpensive(double minPrice) {
+        return products.findByPriceGreaterThan(minPrice);
+    }
+}
+```
+
+### Imperative API (always available)
+
+For complex queries, aggregations, or atomic operations, inject `Morphium` directly:
+
+```java
+@Inject Morphium morphium;
+
+public List<Map<String, Object>> salesByCategory() {
+    return morphium.createAggregator(Product.class, Map.class)
+        .group("$category").sum("total", "$price").end()
+        .sort("-total")
+        .aggregateMap();
+}
+```
+
+## Configuration Reference
 
 | Property | Default | Description |
 |---|---|---|
 | `quarkus.morphium.database` | *(required)* | MongoDB database name |
 | `quarkus.morphium.hosts` | `localhost:27017` | Comma-separated `host:port` list |
-| `quarkus.morphium.username` | – | MongoDB username |
-| `quarkus.morphium.password` | – | MongoDB password |
+| `quarkus.morphium.username` | -- | MongoDB username |
+| `quarkus.morphium.password` | -- | MongoDB password |
 | `quarkus.morphium.auth-database` | `admin` | Authentication database |
-| `quarkus.morphium.atlas-url` | – | MongoDB Atlas SRV URL (overrides `hosts`) |
+| `quarkus.morphium.atlas-url` | -- | MongoDB Atlas SRV URL (overrides `hosts`) |
 | `quarkus.morphium.read-preference` | `primary` | Read preference |
 | `quarkus.morphium.create-indexes` | `true` | Create indexes on startup |
 | `quarkus.morphium.max-connections` | `250` | Connection pool size |
-| `quarkus.morphium.driver-name` | `PooledDriver` | Morphium driver name |
+| `quarkus.morphium.driver-name` | `PooledDriver` | `PooledDriver` (production) or `InMemDriver` (tests) |
 | `quarkus.morphium.cache.read-cache-enabled` | `true` | Enable query result cache |
 | `quarkus.morphium.cache.global-valid-time` | `60000` | Cache TTL in milliseconds |
-| `quarkus.morphium.local-date-time.use-bson-date` | `true` | Store `LocalDateTime` as BSON `ISODate`; set `false` for legacy Morphium Map format |
-| `quarkus.morphium.ssl.enabled` | `false` | Enable TLS for the MongoDB connection |
-| `quarkus.morphium.ssl.auth-mechanism` | – | Authentication mechanism (`MONGODB-X509` for X.509 client-cert auth) |
-| `quarkus.morphium.ssl.keystore-path` | – | Path to keystore (JKS/PKCS12) for X.509 / mutual TLS |
-| `quarkus.morphium.ssl.keystore-password` | – | Keystore password |
-| `quarkus.morphium.ssl.truststore-path` | – | Path to truststore for server certificate validation |
-| `quarkus.morphium.ssl.truststore-password` | – | Truststore password |
-| `quarkus.morphium.ssl.invalid-hostname-allowed` | `false` | Allow self-signed hostnames (dev only) |
-| `quarkus.morphium.ssl.x509-username` | – | Explicit X.509 subject DN override |
-| `quarkus.morphium.devservices.replica-set` | `false` | Start single-node replica set (enables transactions) |
-| `quarkus.morphium.health.enabled` | `true` | Enable Morphium health checks (liveness, readiness, startup) |
+| `quarkus.morphium.local-date-time.use-bson-date` | `true` | Store `LocalDateTime` as BSON `ISODate` |
+| `quarkus.morphium.ssl.enabled` | `false` | Enable TLS |
+| `quarkus.morphium.ssl.auth-mechanism` | -- | `MONGODB-X509` for client-cert auth |
+| `quarkus.morphium.ssl.keystore-path` | -- | Keystore path (JKS/PKCS12) |
+| `quarkus.morphium.ssl.keystore-password` | -- | Keystore password |
+| `quarkus.morphium.ssl.truststore-path` | -- | Truststore path |
+| `quarkus.morphium.ssl.truststore-password` | -- | Truststore password |
+| `quarkus.morphium.ssl.invalid-hostname-allowed` | `false` | Allow invalid hostnames (dev only) |
+| `quarkus.morphium.ssl.x509-username` | -- | X.509 subject DN override |
+| `quarkus.morphium.devservices.enabled` | `true` | Enable automatic MongoDB container |
+| `quarkus.morphium.devservices.image-name` | `mongo:8` | Docker image for Dev Services |
+| `quarkus.morphium.devservices.database-name` | `morphium-dev` | Database name in Dev Services |
+| `quarkus.morphium.devservices.replica-set` | `false` | Start as replica set (enables transactions) |
+| `quarkus.morphium.health.enabled` | `true` | Enable health checks |
 
-For the complete configuration reference including detailed descriptions, see the
+For detailed descriptions, see the
 [Configuration Reference](https://bardioc1977.github.io/quarkus-morphium/dev/configuration.html).
 
-## Usage
-
-### Define an entity
+## Transactions
 
 ```java
-import de.caluga.morphium.annotations.*;
-import de.caluga.morphium.annotations.lifecycle.*;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import java.time.Instant;
-
-@Data
-@NoArgsConstructor
-@Entity(collectionName = "products")
-@Lifecycle
-public class ProductEntity {
-
-    @Id
-    private String id;
-
-    @Property(fieldName = "name")
-    private String name;
-
-    @Property(fieldName = "price")
-    private double price;
-
-    @Version
-    @Property(fieldName = "version")
-    private long version;
-
-    @Property(fieldName = "created_at")
-    private Instant createdAt;
-
-    @PreStore
-    public void onStore() {
-        if (createdAt == null) createdAt = Instant.now();
-    }
-}
-```
-
-### Inject and use Morphium
-
-```java
-import de.caluga.morphium.Morphium;
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
-import java.util.List;
-import java.util.Optional;
-
-@ApplicationScoped
-public class ProductRepository {
-
-    @Inject
-    Morphium morphium;
-
-    public void save(ProductEntity product) {
-        morphium.store(product);   // sets id and version in-place
-    }
-
-    public Optional<ProductEntity> findByName(String name) {
-        return Optional.ofNullable(
-            morphium.createQueryFor(ProductEntity.class)
-                .f("name").eq(name)
-                .get()
-        );
-    }
-
-    public List<ProductEntity> findAll() {
-        return morphium.createQueryFor(ProductEntity.class).asList();
-    }
-
-    public void delete(ProductEntity product) {
-        morphium.delete(product);
-    }
-}
-```
-
-### Embedded documents
-
-```java
-@Data
-@NoArgsConstructor
-@Embedded
-public class AddressEmbedded {
-    @Property(fieldName = "street") private String street;
-    @Property(fieldName = "city")   private String city;
-}
-```
-
-## Declarative transactions
-
-Annotate any CDI bean method with `@MorphiumTransactional` to wrap it in a Morphium transaction.
-On success the transaction is committed; on any exception it is rolled back and the exception is
-re-thrown.
-
-```java
-import de.caluga.morphium.Morphium;
-import de.caluga.morphium.quarkus.transaction.MorphiumTransactional;
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
-
 @ApplicationScoped
 public class OrderService {
 
@@ -279,63 +301,15 @@ public class OrderService {
 }
 ```
 
-The annotation can also be placed on a class to apply to all business methods.
-
-### Transaction lifecycle events
-
-The interceptor fires CDI events at each transaction phase. Use `@Observes` with the
-`@MorphiumTxPhase` qualifier to react:
+React to transaction events via CDI:
 
 ```java
-import de.caluga.morphium.quarkus.transaction.MorphiumTransactionEvent;
-import de.caluga.morphium.quarkus.transaction.MorphiumTxPhase;
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.event.Observes;
-
-import static de.caluga.morphium.quarkus.transaction.MorphiumTransactionEvent.Phase.*;
-
-@ApplicationScoped
-public class OrderNotifier {
-
-    void afterCommit(@Observes @MorphiumTxPhase(AFTER_COMMIT) MorphiumTransactionEvent e) {
-        // send confirmation email, publish domain event, etc.
-    }
-
-    void afterRollback(@Observes @MorphiumTxPhase(AFTER_ROLLBACK) MorphiumTransactionEvent e) {
-        log.warn("Transaction rolled back", e.getFailure());
-    }
+void afterCommit(@Observes @MorphiumTxPhase(AFTER_COMMIT) MorphiumTransactionEvent e) {
+    // send confirmation, publish domain event, ...
 }
 ```
 
-| Phase | Fired when | `getFailure()` |
-|---|---|---|
-| `BEFORE_COMMIT` | After the business method succeeds, before `commitTransaction()` | `null` |
-| `AFTER_COMMIT` | After `commitTransaction()` succeeds | `null` |
-| `AFTER_ROLLBACK` | After `abortTransaction()` due to an exception | The causing exception |
-
-## Dev Services (automatic MongoDB container)
-
-In **dev** (`quarkus:dev`) and **test** mode the extension automatically starts a MongoDB
-container via Testcontainers when `quarkus.morphium.hosts` is **not** explicitly configured.
-No `application.properties` changes are needed.
-
-| Config key | Default | Description |
-|---|---|---|
-| `quarkus.morphium.devservices.enabled` | `true` | Set to `false` to disable |
-| `quarkus.morphium.devservices.image-name` | `mongo:8` | Docker image to use |
-| `quarkus.morphium.devservices.database-name` | `morphium-dev` | Database injected into `quarkus.morphium.database` |
-| `quarkus.morphium.devservices.replica-set` | `false` | Start single-node replica set (enables transactions in dev/test) |
-
-```properties
-# Disable Dev Services and point to an external MongoDB instead:
-quarkus.morphium.devservices.enabled=false
-quarkus.morphium.hosts=my-mongo:27017
-quarkus.morphium.database=mydb
-```
-
-## Testing without MongoDB (InMemDriver)
-
-For **unit tests** that should run without Docker, use Morphium's built-in `InMemDriver`:
+## Testing
 
 ```properties
 # src/test/resources/application.properties
@@ -350,80 +324,48 @@ class ProductRepositoryTest {
     @Inject ProductRepository repository;
 
     @Test
-    void shouldSaveAndFind() {
-        var p = new ProductEntity();
+    void shouldFindByCategory() {
+        var p = new Product();
         p.setName("Widget");
+        p.setCategory("tools");
         p.setPrice(9.99);
-
         repository.save(p);
-        assertThat(p.getId()).isNotNull();
-        assertThat(p.getVersion()).isEqualTo(1L);
 
-        var found = repository.findByName("Widget");
-        assertThat(found).isPresent();
-        assertThat(found.get().getPrice()).isEqualTo(9.99);
+        var results = repository.findByCategory("tools");
+        assertThat(results).hasSize(1);
+        assertThat(results.get(0).getName()).isEqualTo("Widget");
     }
 }
 ```
 
-## LocalDateTime storage format
+## Known Limitation: `sun.misc.Unsafe`
 
-By default `LocalDateTime` fields are persisted as native BSON `ISODate` values
-(`quarkus.morphium.local-date-time.use-bson-date=true`).
-This enables native MongoDB date operations (range queries, sorting, `$gt`/`$lt` filters)
-and displays as readable ISO timestamps in mongosh and the Atlas UI.
+The Morphium ORM uses `sun.misc.Unsafe.allocateInstance()` to instantiate entity classes that
+**do not have a no-arg constructor**. This is the de facto standard used by Spring, Jackson,
+Gson, Kryo, Hibernate/Objenesis and others.
 
-```properties
-# application.properties
+**To avoid it:** add a no-arg constructor (can be `private` or package-private) to your
+`@Entity` classes. When present, Morphium uses it directly and `Unsafe` is never called.
 
-# BSON ISODate – recommended for all new projects and Morphia-compatible data (default)
-quarkus.morphium.local-date-time.use-bson-date=true
+`Unsafe.allocateInstance()` is **not** covered by [JEP 471](https://openjdk.org/jeps/471) (JDK 23).
+Once a public replacement API exists, Morphium will migrate to it.
 
-# Legacy Map format {sec: epochSecond, n: nanos} – only for backward compatibility
-quarkus.morphium.local-date-time.use-bson-date=false
-```
-
-### When to use which format
-
-| | BSON `ISODate` (`true`) | Legacy Map (`false`) |
-|---|---|---|
-| New projects | **recommended** | – |
-| Data written by Morphia | compatible | incompatible |
-| Data written by Morphium ≤ 6.1 | incompatible | compatible |
-| Native date queries (`$gt`, `$lt`) | yes | no |
-| Readable in Atlas UI / mongosh | yes | no |
-
-### Migrating from the legacy Map format
-
-If you have existing data stored in Morphium's `{sec: …, n: …}` Map format and want to
-migrate to BSON `ISODate`, run a one-off migration script **before** switching the flag:
-
-```javascript
-// mongosh – run once per collection that contains LocalDateTime fields
-db.my_collection.find({ created_at: { $type: "object" } }).forEach(doc => {
-  const dt = new Date(doc.created_at.sec * 1000);
-  db.my_collection.updateOne(
-    { _id: doc._id },
-    { $set: { created_at: dt } }
-  );
-});
-```
-
-After the migration, set `quarkus.morphium.local-date-time.use-bson-date=true` (or remove the
-property, as `true` is the default).
-
-## Building from source
+## Building from Source
 
 ```bash
-# Build and install locally (requires Morphium 6.2.0-SNAPSHOT from Bardioc1977/morphium)
+# Requires Morphium 6.2.0-SNAPSHOT from Bardioc1977/morphium
 mvn install
 
 # Skip tests
 mvn install -DskipTests
-
-# Verify formatting and full build
-mvn verify
 ```
+
+## Related Projects
+
+- [Morphium](https://github.com/sboesebeck/morphium) — the underlying MongoDB ORM
+- [quarkus-morphium-showcase](https://github.com/Bardioc1977/quarkus-morphium-showcase) — interactive demo with all features
+- [Quarkus](https://quarkus.io) — supersonic, subatomic Java framework
+- [Jakarta Data 1.0](https://jakarta.ee/specifications/data/1.0/) — the specification
 
 ## Contributing
 
@@ -433,27 +375,4 @@ This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.
 
 ## License
 
-This project is licensed under the [Apache License 2.0](LICENSE).
-
-## Documentation
-
-Comprehensive documentation is available as an Antora-generated site:
-
-**[quarkus-morphium Documentation](https://bardioc1977.github.io/quarkus-morphium/dev/index.html)**
-
-The documentation covers:
-- [Getting Started](https://bardioc1977.github.io/quarkus-morphium/dev/getting-started.html) – installation, first entity, first query
-- [Configuration Reference](https://bardioc1977.github.io/quarkus-morphium/dev/configuration.html) – all properties including SSL/TLS
-- [Entities & Annotations](https://bardioc1977.github.io/quarkus-morphium/dev/entities.html) – `@Entity`, `@Embedded`, lifecycle hooks
-- [Transactions](https://bardioc1977.github.io/quarkus-morphium/dev/transactions.html) – `@MorphiumTransactional`, CDI events
-- [Dev Services](https://bardioc1977.github.io/quarkus-morphium/dev/dev-services.html) – automatic MongoDB container, replica-set mode
-- [Health Checks](https://bardioc1977.github.io/quarkus-morphium/dev/health-checks.html) – MicroProfile probes, Kubernetes mapping
-- [Testing](https://bardioc1977.github.io/quarkus-morphium/dev/testing.html) – Dev Services vs. InMemDriver strategies
-- [Advanced Topics](https://bardioc1977.github.io/quarkus-morphium/dev/advanced.html) – SSL/TLS, Atlas SRV, blocking detection, GraalVM
-
-## Related projects
-
-- [Morphium](https://github.com/sboesebeck/morphium) – the underlying MongoDB ORM
-- [Quarkus](https://quarkus.io) – the supersonic, subatomic Java framework
-- [Quarkiverse Hub](https://github.com/quarkiverse) – community Quarkus extensions
-
+[Apache License 2.0](LICENSE)

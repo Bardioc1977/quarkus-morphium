@@ -18,6 +18,7 @@ package de.caluga.morphium.quarkus.transaction;
 import org.jboss.logging.Logger;
 
 import de.caluga.morphium.Morphium;
+import de.caluga.morphium.driver.MorphiumDriverException;
 import de.caluga.morphium.quarkus.transaction.MorphiumTransactionEvent.Phase;
 import jakarta.enterprise.event.Event;
 import jakarta.inject.Inject;
@@ -110,14 +111,62 @@ public class MorphiumTransactionalInterceptor {
         try {
             Object result = ctx.proceed();
             beforeCommit.fire(new MorphiumTransactionEvent(Phase.BEFORE_COMMIT));
-            morphium.commitTransaction();
+            safeCommit();
             afterCommit.fire(new MorphiumTransactionEvent(Phase.AFTER_COMMIT));
             return result;
         } catch (Exception e) {
-            morphium.abortTransaction();
+            safeAbort();
             afterRollback.fire(new MorphiumTransactionEvent(Phase.AFTER_ROLLBACK, e));
             throw e;
         }
+    }
+
+    /**
+     * Commits the current transaction, tolerating the case where no server-side
+     * transaction exists (e.g. when all repository calls were mocked in tests
+     * and no actual DB operations reached the server).
+     */
+    private void safeCommit() throws MorphiumDriverException {
+        if (morphium.getTransaction() == null) {
+            return;
+        }
+        try {
+            morphium.commitTransaction();
+        } catch (MorphiumDriverException e) {
+            if (isNoServerTransaction(e)) {
+                log.debugf("No server-side transaction to commit (no DB operations occurred): %s",
+                        e.getMessage());
+            } else {
+                throw e;
+            }
+        }
+    }
+
+    /**
+     * Aborts the current transaction if one exists, tolerating the case where
+     * no server-side transaction was started.
+     */
+    private void safeAbort() {
+        if (morphium.getTransaction() == null) {
+            return;
+        }
+        try {
+            morphium.abortTransaction();
+        } catch (MorphiumDriverException e) {
+            if (isNoServerTransaction(e)) {
+                log.debugf("No server-side transaction to abort (no DB operations occurred): %s",
+                        e.getMessage());
+            } else {
+                log.warnf("Could not abort transaction: %s", e.getMessage());
+            }
+        } catch (Exception e) {
+            log.warnf("Could not abort transaction: %s", e.getMessage());
+        }
+    }
+
+    private static boolean isNoServerTransaction(MorphiumDriverException e) {
+        String msg = e.getMessage();
+        return msg != null && msg.contains("Cannot start a transaction");
     }
 
     /**

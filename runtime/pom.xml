@@ -29,6 +29,12 @@
       <groupId>io.quarkus</groupId>
       <artifactId>quarkus-smallrye-health</artifactId>
     </dependency>
+    <!-- Jakarta Data API -->
+    <dependency>
+      <groupId>jakarta.data</groupId>
+      <artifactId>jakarta.data-api</artifactId>
+      <version>${jakarta.data.version}</version>
+    </dependency>
     <!-- The Morphium ORM library -->
     <dependency>
       <groupId>de.caluga</groupId>
