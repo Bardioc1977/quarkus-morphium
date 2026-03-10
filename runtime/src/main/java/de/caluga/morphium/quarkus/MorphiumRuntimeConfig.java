@@ -70,9 +70,36 @@ public interface MorphiumRuntimeConfig {
     @WithDefault("primary")
     String readPreference();
 
-    /** Whether Morphium should automatically create / verify indexes on startup. */
-    @WithDefault("true")
-    boolean createIndexes();
+    /**
+     * Index creation strategy. Controls when and if Morphium ensures that
+     * {@code @Index} annotations are reflected as actual MongoDB indexes.
+     *
+     * <ul>
+     *   <li>{@code create-on-startup} – <b>(default)</b> create missing indexes
+     *       when the Morphium instance connects. Reliable even when the first
+     *       write happens inside a transaction.</li>
+     *   <li>{@code warn-on-startup} – log a warning for every missing index at
+     *       startup but do <em>not</em> create them.</li>
+     *   <li>{@code create-on-write-new-col} – create indexes lazily, only when
+     *       writing to a collection that does not yet exist (skipped inside
+     *       transactions).</li>
+     *   <li>{@code no-check} – disable all index management.</li>
+     * </ul>
+     */
+    @WithDefault("create-on-startup")
+    IndexCheckMode indexCheck();
+
+    /** Strategy for automatic index management. */
+    enum IndexCheckMode {
+        /** Do not check or create indexes. */
+        NO_CHECK,
+        /** Log warnings for missing indexes at startup. */
+        WARN_ON_STARTUP,
+        /** Create missing indexes at startup (recommended). */
+        CREATE_ON_STARTUP,
+        /** Create indexes only when writing to a new collection (not inside transactions). */
+        CREATE_ON_WRITE_NEW_COL
+    }
 
     /** Maximum number of MongoDB connections in the pool. */
     @WithDefault("250")

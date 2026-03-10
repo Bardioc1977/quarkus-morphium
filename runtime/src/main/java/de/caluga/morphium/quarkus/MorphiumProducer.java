@@ -18,6 +18,7 @@ package de.caluga.morphium.quarkus;
 import de.caluga.morphium.Morphium;
 import de.caluga.morphium.MorphiumConfig;
 import de.caluga.morphium.ObjectMapperImpl;
+import de.caluga.morphium.config.CollectionCheckSettings;
 import de.caluga.morphium.driver.wire.SslHelper;
 import de.caluga.morphium.objectmapping.LocalDateTimeMapper;
 import java.time.LocalDateTime;
@@ -136,8 +137,21 @@ public class MorphiumProducer {
         cfg.driverSettings().setDriverName(config.driverName());
         cfg.connectionSettings().setMaxConnections(config.maxConnections());
         cfg.driverSettings().setDefaultReadPreferenceType(config.readPreference());
-        if (config.createIndexes()) {
-            cfg.setAutoIndexAndCappedCreationOnWrite(true);
+
+        // Map the quarkus.morphium.index-check enum to Morphium's CollectionCheckSettings
+        switch (config.indexCheck()) {
+            case CREATE_ON_STARTUP:
+                cfg.collectionCheckSettings().setIndexCheck(CollectionCheckSettings.IndexCheck.CREATE_ON_STARTUP);
+                break;
+            case WARN_ON_STARTUP:
+                cfg.collectionCheckSettings().setIndexCheck(CollectionCheckSettings.IndexCheck.WARN_ON_STARTUP);
+                break;
+            case CREATE_ON_WRITE_NEW_COL:
+                cfg.setAutoIndexAndCappedCreationOnWrite(true);
+                break;
+            case NO_CHECK:
+                cfg.collectionCheckSettings().setIndexCheck(CollectionCheckSettings.IndexCheck.NO_CHECK);
+                break;
         }
 
         // Host configuration
