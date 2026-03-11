@@ -39,6 +39,8 @@ jobs:
           server-id: github
 
       # Morphium is not yet on Maven Central – build from source first.
+      # Use -DskipTests (not -Dmaven.test.skip) so test-jar is still produced
+      # for poppydb's test dependency resolution.
       - name: Checkout Morphium
         uses: actions/checkout@v6
         with:
@@ -46,8 +48,8 @@ jobs:
           ref: master
           path: morphium-src
 
-      - name: Install Morphium SNAPSHOT
-        run: mvn -B install -Dmaven.test.skip=true -f morphium-src/pom.xml
+      - name: Install Morphium
+        run: mvn -B install -DskipTests -f morphium-src/pom.xml
 
       - name: Build and test
         run: mvn -B verify
