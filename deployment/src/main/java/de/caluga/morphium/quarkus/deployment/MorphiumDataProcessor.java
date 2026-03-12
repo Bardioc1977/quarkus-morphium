@@ -903,12 +903,15 @@ public class MorphiumDataProcessor {
             AnnotationInstance byAnn = method.parameters().get(i).annotation(BY_ANNOTATION);
             if (byAnn != null) {
                 String fieldName = byAnn.value().asString();
-                // Validate field exists
-                if (entityFields != null && !entityFields.isEmpty()
-                        && !entityFields.contains(fieldName) && !"id(this)".equals(fieldName)) {
-                    log.warn("@By(\"{}\") on method {}.{} param {} — field not found on entity {}. " +
-                                    "Will use as-is (may be resolved at runtime via @Property).",
-                            fieldName, method.declaringClass().name(), method.name(), i, entityClassName);
+                // Validate field exists — for dot-notation paths (e.g. "category.name")
+                // only validate the root segment against entity fields
+                if (entityFields != null && !entityFields.isEmpty() && !"id(this)".equals(fieldName)) {
+                    String rootField = fieldName.contains(".") ? fieldName.substring(0, fieldName.indexOf('.')) : fieldName;
+                    if (!entityFields.contains(rootField)) {
+                        log.warn("@By(\"{}\") on method {}.{} param {} — field '{}' not found on entity {}. " +
+                                        "Will use as-is (may be resolved at runtime via @Property).",
+                                fieldName, method.declaringClass().name(), method.name(), i, rootField, entityClassName);
+                    }
                 }
                 if (conditionsSpec.length() > 0) conditionsSpec.append(",");
                 conditionsSpec.append(fieldName).append(":").append(i);
