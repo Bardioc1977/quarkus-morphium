@@ -6,16 +6,17 @@
 [![Java](https://img.shields.io/badge/Java-21%2B-orange)](https://adoptium.net)
 [![Jakarta Data](https://img.shields.io/badge/Jakarta%20Data-1.0-green)](https://jakarta.ee/specifications/data/1.0/)
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-brightgreen)](https://bardioc1977.github.io/quarkus-morphium/dev/index.html)
+[![Live Demo](https://img.shields.io/badge/demo-morphium.kopp--cloud.de-blueviolet)](https://morphium.kopp-cloud.de)
 
 > **Note:** This extension is built on the [Bardioc1977/morphium](https://github.com/Bardioc1977/morphium) fork
-> (currently **6.2.0-SNAPSHOT**). Fork improvements are being contributed back to the
+> (currently **6.2.1-SNAPSHOT**). Fork improvements are being contributed back to the
 > upstream [sboesebeck/morphium](https://github.com/sboesebeck/morphium) project via pull requests and are
-> progressively merged. See also: [quarkus-morphium-showcase](https://github.com/Bardioc1977/quarkus-morphium-showcase).
+> progressively merged. Try the **[Live Demo](https://morphium.kopp-cloud.de)** to see all features in action.
 
 A [Quarkus](https://quarkus.io) CDI extension for [Morphium](https://github.com/sboesebeck/morphium),
 an actively maintained MongoDB ORM for Java — with full **Jakarta Data 1.0** support.
 
-**[Read the full documentation](https://bardioc1977.github.io/quarkus-morphium/dev/index.html)** | **[Live Showcase](https://github.com/Bardioc1977/quarkus-morphium-showcase)**
+**[Live Demo](https://morphium.kopp-cloud.de)** | **[Documentation](https://bardioc1977.github.io/quarkus-morphium/dev/index.html)** | **[Showcase Source](https://github.com/Bardioc1977/quarkus-morphium-showcase)**
 
 ---
 
@@ -149,7 +150,7 @@ aggregation pipelines, bulk updates, and anything beyond standard CRUD.
 |---|---|
 | Java | 21 |
 | Quarkus | 3.32.1 |
-| Morphium | 6.2.0-SNAPSHOT ([Bardioc1977/morphium](https://github.com/Bardioc1977/morphium)) |
+| Morphium | 6.2.1-SNAPSHOT ([Bardioc1977/morphium](https://github.com/Bardioc1977/morphium)) |
 
 ## Installation
 
@@ -393,8 +394,9 @@ mvn install -DskipTests
 
 ## Related Projects
 
+- **[Live Demo](https://morphium.kopp-cloud.de)** — try the showcase online
+- [quarkus-morphium-showcase](https://github.com/Bardioc1977/quarkus-morphium-showcase) — interactive demo source code
 - [Morphium](https://github.com/sboesebeck/morphium) — the underlying MongoDB ORM
-- [quarkus-morphium-showcase](https://github.com/Bardioc1977/quarkus-morphium-showcase) — interactive demo with all features
 - [Quarkus](https://quarkus.io) — supersonic, subatomic Java framework
 - [Jakarta Data 1.0](https://jakarta.ee/specifications/data/1.0/) — the specification
 
