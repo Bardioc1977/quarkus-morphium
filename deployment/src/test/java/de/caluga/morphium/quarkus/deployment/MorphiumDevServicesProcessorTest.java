@@ -18,7 +18,7 @@ package de.caluga.morphium.quarkus.deployment;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MongoDBContainer;
+import org.testcontainers.mongodb.MongoDBContainer;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
