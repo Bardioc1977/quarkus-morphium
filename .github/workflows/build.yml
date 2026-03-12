@@ -45,7 +45,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: Bardioc1977/morphium
-          ref: master
+          ref: develop
           path: morphium-src
 
       - name: Install Morphium
