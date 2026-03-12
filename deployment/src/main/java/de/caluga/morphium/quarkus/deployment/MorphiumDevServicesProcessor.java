@@ -26,6 +26,7 @@ import org.testcontainers.mongodb.MongoDBContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.utility.DockerImageName;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -113,8 +114,8 @@ public class MorphiumDevServicesProcessor {
         if (config.replicaSet()) {
             log.info("Morphium Dev Services: starting MongoDB single-node replica set from image '{}' "
                     + "(transactions enabled)", image);
-            // MongoDBContainer handles --replSet, rs.initiate() and PRIMARY wait automatically.
-            container = new MongoDBContainer(DockerImageName.parse(image));
+            // MongoDBContainer requires explicit .withReplicaSet() to enable --replSet and rs.initiate().
+            container = new MongoDBContainer(DockerImageName.parse(image)).withReplicaSet();
         } else {
             log.info("Morphium Dev Services: starting MongoDB standalone container from image '{}'", image);
             container = new GenericContainer<>(DockerImageName.parse(image))
@@ -157,13 +158,25 @@ public class MorphiumDevServicesProcessor {
             GenericContainer<?> container, MorphiumDevServicesBuildTimeConfig config) {
 
         int port = container.getMappedPort(MONGO_PORT);
+        var props = new HashMap<String, String>();
+        props.put("quarkus.morphium.hosts", "localhost:" + port);
+        props.put("quarkus.morphium.database", config.databaseName());
+
+        // When running as replica set, pass the replica set name so Morphium
+        // connects in replica set mode (required for transactions).
+        if (container instanceof MongoDBContainer mongoContainer) {
+            String connStr = mongoContainer.getConnectionString();
+            int idx = connStr.indexOf("replicaSet=");
+            String rsName = idx >= 0
+                    ? connStr.substring(idx + 11).split("&")[0]
+                    : "docker-rs";
+            props.put("quarkus.morphium.replica-set-name", rsName);
+        }
+
         return DevServicesResultBuildItem.discovered()
                 .feature("morphium")
                 .containerId(container.getContainerId())
-                .config(Map.of(
-                        "quarkus.morphium.hosts",    "localhost:" + port,
-                        "quarkus.morphium.database", config.databaseName()
-                ))
+                .config(props)
                 .build();
     }
 

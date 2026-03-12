@@ -118,6 +118,13 @@ public interface MorphiumRuntimeConfig {
     @WithDefault("PooledDriver")
     String driverName();
 
+    /**
+     * MongoDB replica set name. When set, Morphium connects in replica set mode
+     * which is required for transactions. Dev Services sets this automatically
+     * when {@code quarkus.morphium.devservices.replica-set=true}.
+     */
+    Optional<String> replicaSetName();
+
     /** Nested cache configuration. */
     CacheConfig cache();
 

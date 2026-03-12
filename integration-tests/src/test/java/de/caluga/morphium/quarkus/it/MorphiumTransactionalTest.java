@@ -19,8 +19,12 @@ import de.caluga.morphium.Morphium;
 import de.caluga.morphium.quarkus.transaction.MorphiumTransactionEvent;
 import de.caluga.morphium.quarkus.transaction.MorphiumTransactionEvent.Phase;
 import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.junit.QuarkusTestProfile;
+import io.quarkus.test.junit.TestProfile;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.*;
+
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -28,11 +32,28 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Integration tests for {@code @MorphiumTransactional} interceptor and
  * transaction lifecycle events.
+ *
+ * <p>Transactions require a MongoDB replica set. This test uses Dev Services
+ * with {@code quarkus.morphium.devservices.replica-set=true} to start a
+ * single-node replica set via Testcontainers.
  */
 @QuarkusTest
+@TestProfile(MorphiumTransactionalTest.ReplicaSetProfile.class)
 @DisplayName("@MorphiumTransactional interceptor + events")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class MorphiumTransactionalTest {
+
+    public static class ReplicaSetProfile implements QuarkusTestProfile {
+        @Override
+        public Map<String, String> getConfigOverrides() {
+            return Map.of(
+                    "quarkus.morphium.database", "tx-test",
+                    "quarkus.morphium.driver-name", "PooledDriver",
+                    "quarkus.morphium.devservices.enabled", "true",
+                    "quarkus.morphium.devservices.replica-set", "true"
+            );
+        }
+    }
 
     @Inject
     Morphium morphium;

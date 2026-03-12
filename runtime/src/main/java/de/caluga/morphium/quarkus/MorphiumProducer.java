@@ -168,6 +168,11 @@ public class MorphiumProducer {
             }
         }
 
+        // Replica set name (required for transactions)
+        if (config.replicaSetName().isPresent()) {
+            cfg.clusterSettings().setRequiredReplicaSetName(config.replicaSetName().get());
+        }
+
         // Credentials
         if (config.username().isPresent() && config.password().isPresent()) {
             cfg.authSettings().setMongoLogin(config.username().get());
@@ -182,13 +187,19 @@ public class MorphiumProducer {
         // TLS / X.509 settings
         configureSsl(cfg, config.ssl());
 
-        log.info("Creating Morphium connection to database '{}' (driver: {}, ssl: {}, authMechanism: {}, localDateTimeAsBsonDate: {})",
-            config.database(), config.driverName(),
-            config.ssl().enabled(),
-            config.ssl().authMechanism().orElse("SCRAM (default)"),
-            config.localDateTime().useBsonDate());
+        log.info("Creating Morphium connection to database '{}' (hosts: {}, driver: {}, replicaSetName: {}, ssl: {})",
+            config.database(), config.hosts(), config.driverName(),
+            config.replicaSetName().orElse("(none)"),
+            config.ssl().enabled());
 
         Morphium m = new Morphium(cfg);
+
+        // Defensive: ensure the driver knows it's a replica set when a RS name is configured.
+        // PooledDriver < 6.2.1 only checked host-seed count, missing single-node replica sets.
+        if (config.replicaSetName().isPresent() && !m.getDriver().isReplicaSet()) {
+            log.debug("Forcing replicaSet=true on driver (single-node replica set workaround)");
+            m.getDriver().setReplicaSet(true);
+        }
 
         // Override the default LocalDateTimeMapper with the configured format.
         // useBsonDate=true  → ISODate (native MongoDB dates, compatible with Morphia data)
