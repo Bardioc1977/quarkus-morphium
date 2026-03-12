@@ -22,7 +22,7 @@ public final class MethodNameParser {
     private MethodNameParser() {}
 
     private static final Pattern PREFIX_PATTERN = Pattern.compile(
-            "^(find|count|exists|delete)By(.+)$");
+            "^(find|count|exists|delete)By(.*)$");
 
     private static final Pattern ORDER_BY_SPLIT = Pattern.compile(
             "^(.+?)OrderBy(.+)$");
@@ -54,6 +54,18 @@ public final class MethodNameParser {
             default -> throw new IllegalArgumentException("Unknown prefix: " + prefixStr);
         };
 
+        ReturnType returnType = switch (prefix) {
+            case FIND -> ReturnType.LIST;  // may be overridden to SINGLE by caller
+            case COUNT -> ReturnType.COUNT;
+            case EXISTS -> ReturnType.BOOLEAN;
+            case DELETE -> ReturnType.COUNT;
+        };
+
+        // No conditions after "By" → match all entities (e.g. countBy(), findBy(), deleteBy())
+        if (rest.isEmpty()) {
+            return new QueryDescriptor(prefix, List.of(), Combinator.AND, List.of(), returnType);
+        }
+
         // Split off OrderBy clause
         List<OrderSpec> orderSpecs = new ArrayList<>();
         Matcher orderMatcher = ORDER_BY_SPLIT.matcher(rest);
@@ -82,13 +94,6 @@ public final class MethodNameParser {
             conditions.add(pc.condition);
             paramIndex = pc.nextParamIndex;
         }
-
-        ReturnType returnType = switch (prefix) {
-            case FIND -> ReturnType.LIST;  // may be overridden to SINGLE by caller
-            case COUNT -> ReturnType.COUNT;
-            case EXISTS -> ReturnType.BOOLEAN;
-            case DELETE -> ReturnType.COUNT;
-        };
 
         return new QueryDescriptor(prefix, conditions, combinator, orderSpecs, returnType);
     }

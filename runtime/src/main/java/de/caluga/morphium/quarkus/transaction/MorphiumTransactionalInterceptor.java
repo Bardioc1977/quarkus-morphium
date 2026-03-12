@@ -99,6 +99,14 @@ public class MorphiumTransactionalInterceptor {
             return proceedWithEvents(ctx);
         }
 
+        // REQUIRED propagation: if a transaction is already active, just participate
+        if (morphium.getTransaction() != null) {
+            log.debugf("Joining existing transaction for %s.%s",
+                    ctx.getMethod().getDeclaringClass().getSimpleName(),
+                    ctx.getMethod().getName());
+            return ctx.proceed();
+        }
+
         try {
             morphium.startTransaction();
         } catch (UnsupportedOperationException e) {

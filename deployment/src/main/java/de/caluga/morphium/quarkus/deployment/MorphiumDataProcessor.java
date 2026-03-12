@@ -1201,6 +1201,9 @@ public class MorphiumDataProcessor {
         AnnotationInstance queryAnn = method.annotation(QUERY_ANNOTATION);
         String jdql = queryAnn.value().asString();
 
+        // Build-time validation: reject MongoDB JSON syntax and positional parameters
+        validateJdqlSyntax(jdql, method);
+
         // Build @Param name-to-index mapping and detect special params
         StringBuilder paramMapSpec = new StringBuilder();
         int sortParamIndex = -1;
@@ -1303,6 +1306,35 @@ public class MorphiumDataProcessor {
         }
 
         log.info("Generated @Query method: {}.{} → JDQL: {}", method.declaringClass().name(), method.name(), jdql);
+    }
+
+    /**
+     * Validates that a {@code @Query} annotation value uses JDQL syntax with named parameters
+     * ({@code :paramName}), not MongoDB JSON syntax or JPA-style positional parameters ({@code ?1}).
+     *
+     * @throws IllegalStateException if the query uses unsupported syntax
+     */
+    private void validateJdqlSyntax(String jdql, MethodInfo method) {
+        if (jdql == null || jdql.isBlank()) {
+            return;
+        }
+        String trimmed = jdql.trim();
+        // Detect MongoDB JSON syntax: starts with { or contains $-operators
+        if (trimmed.startsWith("{")) {
+            throw new IllegalStateException(
+                    "@Query on " + method.declaringClass().name() + "." + method.name()
+                    + " uses MongoDB JSON syntax: \"" + jdql + "\". "
+                    + "Jakarta Data @Query requires JDQL syntax with named parameters (:paramName). "
+                    + "Example: @Query(\"WHERE field = :param AND other >= :min\")");
+        }
+        // Detect JPA-style positional parameters: ?1, ?2, etc.
+        if (trimmed.matches(".*\\?\\d+.*")) {
+            throw new IllegalStateException(
+                    "@Query on " + method.declaringClass().name() + "." + method.name()
+                    + " uses positional parameters (?1, ?2, ...): \"" + jdql + "\". "
+                    + "Jakarta Data @Query requires named parameters (:paramName). "
+                    + "Example: @Query(\"WHERE field = :param\") with @Param(\"param\") on method parameters.");
+        }
     }
 
     // -----------------------------------------------------------------
