@@ -8,7 +8,7 @@
   <parent>
     <groupId>io.quarkiverse.morphium</groupId>
     <artifactId>quarkus-morphium-parent</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1-SNAPSHOT</version>
   </parent>
 
   <artifactId>quarkus-morphium-integration-tests</artifactId>
