@@ -196,4 +196,33 @@ public interface OrderRepository extends BasicRepository<OrderEntity, String> {
 
     @Query("SELECT COUNT(this) WHERE status = :status")
     CompletionStage<Long> countByStatusAsync(@Param("status") String status);
+
+    // --- #10 JDQL String Literals + NOT Operator ---
+
+    @Query("WHERE status = 'OPEN' ORDER BY amount ASC")
+    List<OrderEntity> queryByStringLiteral();
+
+    @Query("WHERE status = 'OPEN' AND amount > :minAmount ORDER BY amount ASC")
+    List<OrderEntity> queryByStringLiteralAndParam(@Param("minAmount") double minAmount);
+
+    @Query("WHERE NOT status = :status ORDER BY amount ASC")
+    List<OrderEntity> queryNotByStatus(@Param("status") String status);
+
+    @Query("WHERE NOT status = 'CANCELLED'")
+    List<OrderEntity> queryNotCancelled();
+
+    @Query("WHERE status = :status AND NOT urgent = true ORDER BY amount ASC")
+    List<OrderEntity> queryByStatusNotUrgent(@Param("status") String status);
+
+    @Query("WHERE NOT amount > :maxAmount ORDER BY amount ASC")
+    List<OrderEntity> queryNotAmountGreaterThan(@Param("maxAmount") double maxAmount);
+
+    @Query("WHERE NOT status IN :statuses ORDER BY amount ASC")
+    List<OrderEntity> queryNotInStatuses(@Param("statuses") java.util.Collection<String> statuses);
+
+    @Query("WHERE NOT status LIKE :pattern ORDER BY amount ASC")
+    List<OrderEntity> queryNotLike(@Param("pattern") String pattern);
+
+    @Query("SELECT COUNT(this) WHERE status = 'OPEN'")
+    long countOpenLiteral();
 }

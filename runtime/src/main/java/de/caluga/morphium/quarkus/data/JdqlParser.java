@@ -25,8 +25,10 @@ import java.util.regex.Pattern;
  *   <li>{@code field IS NULL} / {@code field IS NOT NULL}</li>
  *   <li>Boolean literals: {@code field = true} / {@code field = false}</li>
  *   <li>Numeric literals: {@code field > 100}</li>
+ *   <li>String literals: {@code field = 'value'}</li>
+ *   <li>NOT prefix: {@code NOT field = :param} / {@code NOT field LIKE :pattern}</li>
  * </ul>
- * Not supported: JOINs, GROUP BY, HAVING, subqueries.
+ * Not supported: JOINs, GROUP BY, HAVING, subqueries, parenthesized NOT.
  */
 public final class JdqlParser {
 
@@ -196,68 +198,82 @@ public final class JdqlParser {
     // -- Condition parsing --
 
     private static JdqlQuery.JdqlCondition parseCondition(String cond) {
-        String upper = cond.toUpperCase(Locale.ROOT);
+        String trimmed = cond.trim();
+        String upper = trimmed.toUpperCase(Locale.ROOT);
+
+        // Detect and strip NOT prefix
+        boolean negated = false;
+        if (upper.startsWith("NOT ")) {
+            negated = true;
+            trimmed = trimmed.substring(4).trim();
+            upper = trimmed.toUpperCase(Locale.ROOT);
+        }
 
         // IS NOT NULL
         if (upper.endsWith(" IS NOT NULL")) {
-            String field = cond.substring(0, cond.length() - " IS NOT NULL".length()).trim();
-            return new JdqlQuery.JdqlCondition(field, JdqlQuery.Operator.IS_NOT_NULL, null, null, null);
+            String field = trimmed.substring(0, trimmed.length() - " IS NOT NULL".length()).trim();
+            JdqlQuery.Operator op = negated ? JdqlQuery.Operator.IS_NULL : JdqlQuery.Operator.IS_NOT_NULL;
+            return new JdqlQuery.JdqlCondition(field, op, null, null, null, false);
         }
 
         // IS NULL
         if (upper.endsWith(" IS NULL")) {
-            String field = cond.substring(0, cond.length() - " IS NULL".length()).trim();
-            return new JdqlQuery.JdqlCondition(field, JdqlQuery.Operator.IS_NULL, null, null, null);
+            String field = trimmed.substring(0, trimmed.length() - " IS NULL".length()).trim();
+            JdqlQuery.Operator op = negated ? JdqlQuery.Operator.IS_NOT_NULL : JdqlQuery.Operator.IS_NULL;
+            return new JdqlQuery.JdqlCondition(field, op, null, null, null, false);
         }
 
         // BETWEEN :min AND :max
         Pattern betweenPattern = Pattern.compile(
                 "(.+?)\\s+BETWEEN\\s+(.+?)\\s+AND\\s+(.+)", Pattern.CASE_INSENSITIVE);
-        Matcher betweenMatcher = betweenPattern.matcher(cond);
+        Matcher betweenMatcher = betweenPattern.matcher(trimmed);
         if (betweenMatcher.matches()) {
             String field = betweenMatcher.group(1).trim();
             String minRef = betweenMatcher.group(2).trim();
             String maxRef = betweenMatcher.group(3).trim();
             return new JdqlQuery.JdqlCondition(field, JdqlQuery.Operator.BETWEEN,
-                    extractParamOrLiteral(minRef), extractParamOrLiteral(maxRef), null);
+                    extractParamOrLiteral(minRef), extractParamOrLiteral(maxRef), null, negated);
         }
 
-        // NOT IN :param
+        // NOT IN :param (within condition, NOT as infix operator on field)
         Pattern notInPattern = Pattern.compile(
                 "(.+?)\\s+NOT\\s+IN\\s+(.+)", Pattern.CASE_INSENSITIVE);
-        Matcher notInMatcher = notInPattern.matcher(cond);
+        Matcher notInMatcher = notInPattern.matcher(trimmed);
         if (notInMatcher.matches()) {
             String field = notInMatcher.group(1).trim();
             String paramRef = notInMatcher.group(2).trim();
-            return new JdqlQuery.JdqlCondition(field, JdqlQuery.Operator.NOT_IN,
-                    extractParamOrLiteral(paramRef), null, null);
+            // "NOT field NOT IN x" (double negation) → field IN x
+            JdqlQuery.Operator op = negated ? JdqlQuery.Operator.IN : JdqlQuery.Operator.NOT_IN;
+            return new JdqlQuery.JdqlCondition(field, op,
+                    extractParamOrLiteral(paramRef), null, null, false);
         }
 
         // IN :param
         Pattern inPattern = Pattern.compile(
                 "(.+?)\\s+IN\\s+(.+)", Pattern.CASE_INSENSITIVE);
-        Matcher inMatcher = inPattern.matcher(cond);
+        Matcher inMatcher = inPattern.matcher(trimmed);
         if (inMatcher.matches()) {
             String field = inMatcher.group(1).trim();
             String paramRef = inMatcher.group(2).trim();
             return new JdqlQuery.JdqlCondition(field, JdqlQuery.Operator.IN,
-                    extractParamOrLiteral(paramRef), null, null);
+                    extractParamOrLiteral(paramRef), null, null, negated);
         }
 
         // LIKE :param
         Pattern likePattern = Pattern.compile(
                 "(.+?)\\s+LIKE\\s+(.+)", Pattern.CASE_INSENSITIVE);
-        Matcher likeMatcher = likePattern.matcher(cond);
+        Matcher likeMatcher = likePattern.matcher(trimmed);
         if (likeMatcher.matches()) {
             String field = likeMatcher.group(1).trim();
             String paramRef = likeMatcher.group(2).trim();
             return new JdqlQuery.JdqlCondition(field, JdqlQuery.Operator.LIKE,
-                    extractParamOrLiteral(paramRef), null, null);
+                    extractParamOrLiteral(paramRef), null, null, negated);
         }
 
         // Comparison operators: >=, <=, <>, !=, >, <, =
+        // Use a pattern that handles quoted string values (e.g., 'value with spaces')
         Pattern compPattern = Pattern.compile("(.+?)\\s*(>=|<=|<>|!=|>|<|=)\\s*(.+)");
-        Matcher compMatcher = compPattern.matcher(cond);
+        Matcher compMatcher = compPattern.matcher(trimmed);
         if (compMatcher.matches()) {
             String field = compMatcher.group(1).trim();
             String op = compMatcher.group(2);
@@ -276,19 +292,23 @@ public final class JdqlParser {
             // Check for boolean/null literals
             String upperVal = valueRef.toUpperCase(Locale.ROOT);
             if ("TRUE".equals(upperVal)) {
-                return new JdqlQuery.JdqlCondition(field, operator, null, null, Boolean.TRUE);
+                return new JdqlQuery.JdqlCondition(field, operator, null, null, Boolean.TRUE, negated);
             }
             if ("FALSE".equals(upperVal)) {
-                return new JdqlQuery.JdqlCondition(field, operator, null, null, Boolean.FALSE);
+                return new JdqlQuery.JdqlCondition(field, operator, null, null, Boolean.FALSE, negated);
             }
             if ("NULL".equals(upperVal)) {
-                return new JdqlQuery.JdqlCondition(field,
-                        operator == JdqlQuery.Operator.EQ ? JdqlQuery.Operator.IS_NULL : JdqlQuery.Operator.IS_NOT_NULL,
-                        null, null, null);
+                JdqlQuery.Operator nullOp = operator == JdqlQuery.Operator.EQ
+                        ? JdqlQuery.Operator.IS_NULL : JdqlQuery.Operator.IS_NOT_NULL;
+                if (negated) {
+                    nullOp = nullOp == JdqlQuery.Operator.IS_NULL
+                            ? JdqlQuery.Operator.IS_NOT_NULL : JdqlQuery.Operator.IS_NULL;
+                }
+                return new JdqlQuery.JdqlCondition(field, nullOp, null, null, null, false);
             }
 
             return new JdqlQuery.JdqlCondition(field, operator,
-                    extractParamOrLiteral(valueRef), null, null);
+                    extractParamOrLiteral(valueRef), null, null, negated);
         }
 
         throw new IllegalArgumentException("Cannot parse JDQL condition: " + cond);

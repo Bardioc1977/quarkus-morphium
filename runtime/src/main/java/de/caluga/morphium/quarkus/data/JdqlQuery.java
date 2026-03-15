@@ -36,14 +36,22 @@ public record JdqlQuery(
      * @param valueRef    parameter reference (":name") or literal value, null for IS NULL/IS NOT NULL
      * @param valueRef2   second param/literal for BETWEEN, null otherwise
      * @param literal     literal value (Boolean, etc.) when not using a parameter reference
+     * @param negated     true if the condition is prefixed with NOT
      */
     public record JdqlCondition(
             String fieldName,
             Operator operator,
             String valueRef,
             String valueRef2,
-            Object literal
-    ) {}
+            Object literal,
+            boolean negated
+    ) {
+        /** Convenience constructor without negation (backwards-compatible). */
+        public JdqlCondition(String fieldName, Operator operator, String valueRef,
+                             String valueRef2, Object literal) {
+            this(fieldName, operator, valueRef, valueRef2, literal, false);
+        }
+    }
 
     public record OrderSpec(String field, boolean ascending) {}
 }

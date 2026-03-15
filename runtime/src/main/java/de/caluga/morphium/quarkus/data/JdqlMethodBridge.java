@@ -260,7 +260,10 @@ public final class JdqlMethodBridge {
 
         Object value = resolveValue(cond.valueRef(), paramValues);
 
-        switch (cond.operator()) {
+        // Resolve the effective operator (invert if negated)
+        JdqlQuery.Operator op = cond.negated() ? invertOperator(cond.operator()) : cond.operator();
+
+        switch (op) {
             case EQ -> {
                 if (cond.literal() != null) {
                     field.eq(cond.literal());
@@ -280,7 +283,18 @@ public final class JdqlMethodBridge {
             case LT -> field.lt(value);
             case LTE -> field.lte(value);
             case BETWEEN -> {
+                // NOT BETWEEN a AND b → field < a OR field > b
+                // For simplicity, use $not with $gte/$lte range — but that's complex in Morphium.
+                // Instead: split into two conditions via OR (not directly possible on a single query).
+                // Fallback: use the non-negated form since the parser already inverts for IS_NULL/NOT_IN.
+                // For BETWEEN with negation, the parser sets negated=true and we invert here.
+                // Since there's no clean single-operator inversion for BETWEEN,
+                // we throw for now — the parser documents this limitation.
                 Object value2 = resolveValue(cond.valueRef2(), paramValues);
+                if (cond.negated()) {
+                    throw new UnsupportedOperationException(
+                            "NOT BETWEEN is not supported in JDQL v1. Use 'field < :min OR field > :max' instead.");
+                }
                 field.gte(value);
                 mQuery.f(mongoField).lte(value2);
             }
@@ -290,11 +304,37 @@ public final class JdqlMethodBridge {
                 String pattern = value.toString()
                         .replace("%", ".*")
                         .replace("_", ".");
-                field.matches(Pattern.compile(pattern));
+                if (cond.negated()) {
+                    // NOT LIKE → $not with $regex
+                    field.not();
+                    field.matches(Pattern.compile(pattern));
+                } else {
+                    field.matches(Pattern.compile(pattern));
+                }
             }
             case IS_NULL -> field.eq(null);
             case IS_NOT_NULL -> field.ne(null);
         }
+    }
+
+    /**
+     * Inverts an operator for NOT negation.
+     */
+    private static JdqlQuery.Operator invertOperator(JdqlQuery.Operator op) {
+        return switch (op) {
+            case EQ -> JdqlQuery.Operator.NE;
+            case NE -> JdqlQuery.Operator.EQ;
+            case GT -> JdqlQuery.Operator.LTE;
+            case GTE -> JdqlQuery.Operator.LT;
+            case LT -> JdqlQuery.Operator.GTE;
+            case LTE -> JdqlQuery.Operator.GT;
+            case IN -> JdqlQuery.Operator.NOT_IN;
+            case NOT_IN -> JdqlQuery.Operator.IN;
+            case IS_NULL -> JdqlQuery.Operator.IS_NOT_NULL;
+            case IS_NOT_NULL -> JdqlQuery.Operator.IS_NULL;
+            // LIKE and BETWEEN: keep as-is, handle negation in applyCondition directly
+            case LIKE, BETWEEN -> op;
+        };
     }
 
     private static Object resolveValue(String valueRef, Map<String, Object> paramValues) {
