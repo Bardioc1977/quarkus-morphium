@@ -49,6 +49,16 @@ public interface ProductRepository extends CrudRepository<Product, MorphiumId> {
     @Query("WHERE category = :cat AND price > :minPrice ORDER BY price")
     List<Product> findExpensive(@Param("cat") String category,
                                 @Param("minPrice") double minPrice);
+
+    // GROUP BY with aggregates and HAVING
+    @Query("SELECT category, COUNT(this), SUM(price) GROUP BY category HAVING COUNT(this) > :min")
+    List<CategoryStats> categoriesAboveMin(@Param("min") long minCount);
+
+    // Async query
+    CompletionStage<List<Product>> findByCategoryAsync(String category);
+
+    // Stream for large result sets
+    Stream<Product> findByPriceGreaterThan(double minPrice);
 }
 ```
 
@@ -72,10 +82,12 @@ public class ProductService {
 | **CRUD** | `CrudRepository<T,K>`, `BasicRepository<T,K>`, `DataRepository<T,K>`, `MorphiumRepository<T,K>` — save, insert, update, delete, findById, findAll, existsById |
 | **Query derivation** | `findBy`, `countBy`, `existsBy`, `deleteBy` with operators: Equals, Not, GreaterThan, LessThan, Between, In, NotIn, Like, StartsWith, EndsWith, Null, NotNull, True, False — combined with And/Or |
 | **@Find + @By** | Explicit field binding via parameter annotations, combined with `@Is(Operator)` for non-equality conditions |
-| **@Query (JDQL)** | Jakarta Data Query Language with WHERE, ORDER BY, named parameters (`:param`), comparison operators, BETWEEN, IN, LIKE, IS NULL |
+| **@Query (JDQL)** | Jakarta Data Query Language with WHERE, ORDER BY, named parameters (`:param`), comparison operators, BETWEEN, IN, LIKE, IS NULL, NOT, string literals, GROUP BY (single + multi-field), HAVING (AND/OR), aggregate functions (COUNT/SUM/AVG/MIN/MAX) |
 | **@OrderBy** | Static sort annotation on query methods |
-| **Pagination** | `Page<T>`, `PageRequest` with total counts, `Limit` |
+| **Pagination** | `Page<T>`, `PageRequest` with total counts, `Limit`, `CursoredPage<T>` (keyset pagination), `Page<Record>` for GROUP BY results |
 | **Sorting** | `Sort<T>`, `Order<T>` as method parameters |
+| **Stream** | `Stream<T>` return type with cursor-backed lazy loading for memory-efficient large result sets |
+| **Async** | `CompletionStage<T>` return type for non-blocking repository methods (query derivation, `@Find`, `@Query`) |
 | **@StaticMetamodel** | Auto-generated `Entity_` classes with `Attribute`, `SortableAttribute`, `TextAttribute` fields — type-safe field references |
 | **Build-time validation** | Entity fields, ID types, method signatures validated during `mvn compile` — fail fast, not at runtime |
 

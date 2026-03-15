@@ -11,3 +11,5 @@ target/
 .classpath
 .mvn/timing.properties
 .mvn/wrapper/maven-wrapper.jar
+.claude/
+build/

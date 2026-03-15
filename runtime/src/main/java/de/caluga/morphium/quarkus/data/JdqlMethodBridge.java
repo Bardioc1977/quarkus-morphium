@@ -10,10 +10,13 @@ import jakarta.data.Sort;
 import jakarta.data.page.PageRequest;
 import jakarta.data.page.impl.CursoredPageRecord;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.RecordComponent;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -46,6 +49,7 @@ public final class JdqlMethodBridge {
      * @param returnsCursoredPage true if method returns CursoredPage&lt;T&gt;
      * @param orderBySpec        encoded ordering from {@code @OrderBy}: "field1:ASC,field2:DESC"
      * @param returnsStream      true if method returns Stream&lt;T&gt;
+     * @param resultRecordClass  FQCN of a Java Record for GROUP BY result mapping, null otherwise
      * @return the query result
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -63,7 +67,8 @@ public final class JdqlMethodBridge {
                                      boolean returnsOptional,
                                      boolean returnsCursoredPage,
                                      String orderBySpec,
-                                     boolean returnsStream) {
+                                     boolean returnsStream,
+                                     String resultRecordClass) {
         Morphium morphium = repo.getMorphium();
         Class entityClass = repo.getMetadata().entityClass();
 
@@ -75,7 +80,10 @@ public final class JdqlMethodBridge {
 
         // Aggregate functions → Aggregation Pipeline (early return)
         if (query.aggregateFunctions() != null && !query.aggregateFunctions().isEmpty()) {
-            return executeAggregate(repo, query, paramValues, morphium, entityClass);
+            PageRequest aggPageRequest = (pageRequestParamIndex >= 0 && args[pageRequestParamIndex] != null)
+                    ? (PageRequest) args[pageRequestParamIndex] : null;
+            return executeAggregate(repo, query, paramValues, morphium, entityClass,
+                    resultRecordClass, aggPageRequest);
         }
 
         // Build Morphium query
@@ -379,7 +387,9 @@ public final class JdqlMethodBridge {
     private static Object executeAggregate(AbstractMorphiumRepository<?, ?> repo,
                                             JdqlQuery query,
                                             Map<String, Object> paramValues,
-                                            Morphium morphium, Class entityClass) {
+                                            Morphium morphium, Class entityClass,
+                                            String resultRecordClass,
+                                            PageRequest pageRequest) {
         Aggregator agg = morphium.createAggregator(entityClass, Map.class);
 
         // $match stage: WHERE conditions
@@ -389,8 +399,44 @@ public final class JdqlMethodBridge {
             agg.match(matchQuery);
         }
 
-        // $group stage: _id=null (global aggregation)
-        Group group = agg.group((String) null);
+        boolean isGrouped = query.groupByFields() != null && !query.groupByFields().isEmpty();
+        boolean isCompoundGroup = isGrouped && query.groupByFields().size() > 1;
+
+        // $addFields for COUNT(field) NULL filtering — must come before $group
+        Map<String, Object> addFieldsMap = new LinkedHashMap<>();
+        for (int i = 0; i < query.aggregateFunctions().size(); i++) {
+            JdqlQuery.AggregateFunction func = query.aggregateFunctions().get(i);
+            if (func.type() == JdqlQuery.AggregateType.COUNT && !"this".equals(func.field())) {
+                String mongoField = resolveMongoField(morphium, entityClass, func.field());
+                String helperField = "_cnt_notnull_" + i;
+                addFieldsMap.put(helperField, Map.of(
+                        "$cond", Arrays.asList(
+                                Map.of("$ne", Arrays.asList("$" + mongoField, null)),
+                                1, 0
+                        )
+                ));
+            }
+        }
+        if (!addFieldsMap.isEmpty()) {
+            agg.addFields(addFieldsMap);
+        }
+
+        // $group stage
+        Group group;
+        if (isCompoundGroup) {
+            Map<String, Object> compoundId = new LinkedHashMap<>();
+            for (String field : query.groupByFields()) {
+                compoundId.put(field, "$" + resolveMongoField(morphium, entityClass, field));
+            }
+            group = agg.group(compoundId);
+        } else if (isGrouped) {
+            String groupField = query.groupByFields().get(0);
+            String mongoGroupField = "$" + resolveMongoField(morphium, entityClass, groupField);
+            group = agg.group(mongoGroupField);
+        } else {
+            group = agg.group((String) null);
+        }
+
         for (int i = 0; i < query.aggregateFunctions().size(); i++) {
             JdqlQuery.AggregateFunction func = query.aggregateFunctions().get(i);
             String resultField = "agg_" + i;
@@ -398,7 +444,13 @@ public final class JdqlMethodBridge {
                     : "$" + resolveMongoField(morphium, entityClass, func.field());
 
             switch (func.type()) {
-                case COUNT -> group.sum(resultField, 1);
+                case COUNT -> {
+                    if ("this".equals(func.field())) {
+                        group.sum(resultField, 1);
+                    } else {
+                        group.sum(resultField, "$_cnt_notnull_" + i);
+                    }
+                }
                 case SUM -> group.sum(resultField, mongoField);
                 case AVG -> group.avg(resultField, mongoField);
                 case MIN -> group.min(resultField, mongoField);
@@ -407,9 +459,80 @@ public final class JdqlMethodBridge {
         }
         group.end();
 
+        // $match stages for HAVING (post-group filter)
+        if (query.havingConditions() != null && !query.havingConditions().isEmpty()) {
+            if (query.havingCombinator() == JdqlQuery.Combinator.OR) {
+                // OR: single $match with $or array
+                List<Map<String, Object>> orConditions = new ArrayList<>();
+                for (JdqlQuery.HavingCondition hc : query.havingConditions()) {
+                    String aggField = resolveAggFieldForHaving(hc.aggregateFunction(), query);
+                    Object value = resolveValue(hc.valueRef(), paramValues);
+                    orConditions.add(Map.of(aggField, Map.of(toMongoOperator(hc.operator()), value)));
+                }
+                agg.addOperator(Map.of("$match", Map.of("$or", orConditions)));
+            } else {
+                // AND: separate $match stages (InMemory multi-field workaround)
+                for (JdqlQuery.HavingCondition hc : query.havingConditions()) {
+                    String aggField = resolveAggFieldForHaving(hc.aggregateFunction(), query);
+                    Object value = resolveValue(hc.valueRef(), paramValues);
+                    agg.addOperator(Map.of("$match",
+                            Map.of(aggField, Map.of(toMongoOperator(hc.operator()), value))));
+                }
+            }
+        }
+
+        // For compound GROUP BY: $project to promote _id sub-fields to top level
+        // (InMemAggregator's $sort doesn't handle dotted paths like _id.fieldName)
+        if (isCompoundGroup) {
+            Map<String, Object> projectFields = new LinkedHashMap<>();
+            for (String field : query.groupByFields()) {
+                projectFields.put(field, "$_id." + field);
+            }
+            for (int i = 0; i < query.aggregateFunctions().size(); i++) {
+                projectFields.put("agg_" + i, 1);
+            }
+            projectFields.put("_id", 0);
+            agg.addOperator(Map.of("$project", projectFields));
+        }
+
+        // $sort stage (only for GROUP BY with ORDER BY)
+        if (isGrouped && !query.orderBy().isEmpty()) {
+            Map<String, Integer> sortMap = new LinkedHashMap<>();
+            for (JdqlQuery.OrderSpec spec : query.orderBy()) {
+                String sortKey = resolveAggSortKey(spec.field(), query, morphium, entityClass);
+                sortMap.put(sortKey, spec.ascending() ? 1 : -1);
+            }
+            agg.sort(sortMap);
+        }
+
         List<Map<String, Object>> results = agg.aggregateMap();
 
-        // Empty result → default values
+        // Grouped → List<Record> or Page<Record>
+        if (isGrouped) {
+            List<Object> allMapped = mapGroupedResults(results, query, resultRecordClass);
+
+            if (pageRequest != null) {
+                int size = pageRequest.size();
+                long page = pageRequest.page();
+                int skip = (int) ((page - 1) * size);
+                long totalElements = allMapped.size();
+
+                List<Object> pageContent;
+                if (skip >= allMapped.size()) {
+                    pageContent = List.of();
+                } else {
+                    int end = Math.min(skip + size, allMapped.size());
+                    pageContent = allMapped.subList(skip, end);
+                }
+
+                long effectiveTotal = pageRequest.requestTotal() ? totalElements : -1;
+                return new MorphiumPage<>(pageContent, effectiveTotal, pageRequest);
+            }
+
+            return allMapped;
+        }
+
+        // --- Global aggregation (existing v1 logic) ---
         if (results.isEmpty()) {
             if (query.aggregateFunctions().size() == 1) {
                 return defaultAggregateValue(query.aggregateFunctions().get(0).type());
@@ -433,6 +556,146 @@ public final class JdqlMethodBridge {
             arr[i] = toNumber(result.get("agg_" + i), query.aggregateFunctions().get(i).type());
         }
         return arr;
+    }
+
+    private static String toMongoOperator(JdqlQuery.Operator op) {
+        return switch (op) {
+            case EQ -> "$eq";
+            case NE -> "$ne";
+            case GT -> "$gt";
+            case GTE -> "$gte";
+            case LT -> "$lt";
+            case LTE -> "$lte";
+            default -> throw new IllegalArgumentException("Unsupported HAVING operator: " + op);
+        };
+    }
+
+    private static String resolveAggFieldForHaving(String aggFuncStr, JdqlQuery query) {
+        Matcher aggMatcher = Pattern.compile(
+                "(?i)(COUNT|SUM|AVG|MIN|MAX)\\s*\\(\\s*([a-zA-Z_][a-zA-Z0-9_.]*|this)\\s*\\)")
+                .matcher(aggFuncStr);
+        if (!aggMatcher.matches()) {
+            throw new IllegalArgumentException("HAVING references invalid aggregate: " + aggFuncStr);
+        }
+        String funcName = aggMatcher.group(1).toUpperCase(Locale.ROOT);
+        String argName = aggMatcher.group(2);
+        JdqlQuery.AggregateType type = JdqlQuery.AggregateType.valueOf(funcName);
+        for (int i = 0; i < query.aggregateFunctions().size(); i++) {
+            JdqlQuery.AggregateFunction f = query.aggregateFunctions().get(i);
+            if (f.type() == type && f.field().equals(argName)) {
+                return "agg_" + i;
+            }
+        }
+        throw new IllegalArgumentException("HAVING references unknown aggregate: " + aggFuncStr);
+    }
+
+    private static String resolveAggSortKey(String orderField, JdqlQuery query,
+                                             Morphium morphium, Class entityClass) {
+        // Check if it's an aggregate function reference like "COUNT(this)"
+        Matcher aggMatcher = Pattern.compile(
+                "(?i)(COUNT|SUM|AVG|MIN|MAX)\\s*\\(\\s*([a-zA-Z_][a-zA-Z0-9_.]*|this)\\s*\\)")
+                .matcher(orderField);
+        if (aggMatcher.matches()) {
+            String funcName = aggMatcher.group(1).toUpperCase(Locale.ROOT);
+            String argName = aggMatcher.group(2);
+            JdqlQuery.AggregateType type = JdqlQuery.AggregateType.valueOf(funcName);
+            for (int i = 0; i < query.aggregateFunctions().size(); i++) {
+                JdqlQuery.AggregateFunction f = query.aggregateFunctions().get(i);
+                if (f.type() == type && f.field().equals(argName)) {
+                    return "agg_" + i;
+                }
+            }
+            throw new IllegalArgumentException("ORDER BY references unknown aggregate: " + orderField);
+        }
+        // Check if it's a group field → _id (scalar) or plain field name (compound, after $project)
+        if (query.groupByFields() != null && query.groupByFields().contains(orderField)) {
+            return query.groupByFields().size() == 1 ? "_id" : orderField;
+        }
+        return resolveMongoField(morphium, entityClass, orderField);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Object> mapGroupedResults(List<Map<String, Object>> results,
+                                                   JdqlQuery query,
+                                                   String resultRecordClass) {
+        if (resultRecordClass == null || resultRecordClass.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "GROUP BY queries must return List<RecordType>. " +
+                    "Declare a Java record matching the SELECT clause.");
+        }
+
+        Class<?> recordClass;
+        try {
+            recordClass = Thread.currentThread().getContextClassLoader().loadClass(resultRecordClass);
+        } catch (ClassNotFoundException e) {
+            throw new IllegalArgumentException("Record class not found: " + resultRecordClass, e);
+        }
+
+        RecordComponent[] components = recordClass.getRecordComponents();
+        int groupFieldCount = query.groupByFields() != null ? query.groupByFields().size() : 0;
+        int expectedCount = groupFieldCount + query.aggregateFunctions().size();
+        if (components.length != expectedCount) {
+            throw new IllegalArgumentException(
+                    "Record " + recordClass.getSimpleName() + " has " + components.length
+                    + " components but SELECT has " + expectedCount + " fields");
+        }
+
+        Class<?>[] paramTypes = new Class<?>[components.length];
+        for (int i = 0; i < components.length; i++) {
+            paramTypes[i] = components[i].getType();
+        }
+        Constructor<?> ctor;
+        try {
+            ctor = recordClass.getDeclaredConstructor(paramTypes);
+        } catch (NoSuchMethodException e) {
+            throw new IllegalArgumentException("No canonical constructor for " + recordClass.getName(), e);
+        }
+
+        List<Object> mapped = new ArrayList<>();
+        for (Map<String, Object> row : results) {
+            Object[] ctorArgs = new Object[components.length];
+            // Group fields from _id (scalar) or top-level (compound, after $project)
+            if (groupFieldCount == 1) {
+                ctorArgs[0] = convertValue(row.get("_id"), paramTypes[0]);
+            } else {
+                for (int i = 0; i < groupFieldCount; i++) {
+                    String fieldName = query.groupByFields().get(i);
+                    ctorArgs[i] = convertValue(row.get(fieldName), paramTypes[i]);
+                }
+            }
+            // Aggregates from agg_0, agg_1, ...
+            for (int i = 0; i < query.aggregateFunctions().size(); i++) {
+                Object val = row.get("agg_" + i);
+                ctorArgs[groupFieldCount + i] = convertAggValue(val, paramTypes[groupFieldCount + i]);
+            }
+            try {
+                mapped.add(ctor.newInstance(ctorArgs));
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to instantiate " + recordClass.getSimpleName(), e);
+            }
+        }
+        return mapped;
+    }
+
+    private static Object convertValue(Object value, Class<?> targetType) {
+        if (value == null) return null;
+        if (targetType.isInstance(value)) return value;
+        if (targetType == String.class) return value.toString();
+        if (targetType == long.class || targetType == Long.class) return ((Number) value).longValue();
+        if (targetType == int.class || targetType == Integer.class) return ((Number) value).intValue();
+        if (targetType == double.class || targetType == Double.class) return ((Number) value).doubleValue();
+        if (targetType == boolean.class || targetType == Boolean.class) return Boolean.valueOf(value.toString());
+        return value;
+    }
+
+    private static Object convertAggValue(Object value, Class<?> targetType) {
+        if (value == null) {
+            if (targetType == long.class || targetType == Long.class) return 0L;
+            if (targetType == double.class || targetType == Double.class) return 0.0;
+            if (targetType == int.class || targetType == Integer.class) return 0;
+            return null;
+        }
+        return convertValue(value, targetType);
     }
 
     private static Object defaultAggregateValue(JdqlQuery.AggregateType type) {
@@ -467,11 +730,13 @@ public final class JdqlMethodBridge {
                                                               boolean returnsOptional,
                                                               boolean returnsCursoredPage,
                                                               String orderBySpec,
-                                                              boolean returnsStream) {
+                                                              boolean returnsStream,
+                                                              String resultRecordClass) {
         return CompletableFuture.supplyAsync(
                 () -> executeJdql(repo, jdql, paramMapSpec, sortParamIndex, orderParamIndex,
                         pageRequestParamIndex, limitParamIndex, args, returnsSingle, returnsCount,
-                        returnsBoolean, returnsOptional, returnsCursoredPage, orderBySpec, returnsStream),
+                        returnsBoolean, returnsOptional, returnsCursoredPage, orderBySpec,
+                        returnsStream, resultRecordClass),
                 repo.getAsyncExecutor());
     }
 

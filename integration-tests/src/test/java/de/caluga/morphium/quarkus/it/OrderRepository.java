@@ -8,6 +8,9 @@ import jakarta.data.repository.Param;
 import jakarta.data.repository.Query;
 import jakarta.data.repository.Repository;
 
+import jakarta.data.page.Page;
+import jakarta.data.page.PageRequest;
+
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -225,4 +228,58 @@ public interface OrderRepository extends BasicRepository<OrderEntity, String> {
 
     @Query("SELECT COUNT(this) WHERE status = 'OPEN'")
     long countOpenLiteral();
+
+    // --- #8v2 JDQL GROUP BY ---
+
+    @Query("SELECT status, COUNT(this) GROUP BY status")
+    List<StatusCount> countGroupByStatus();
+
+    @Query("SELECT status, COUNT(this), SUM(amount) GROUP BY status")
+    List<StatusStats> statsByStatus();
+
+    @Query("SELECT status, COUNT(this), SUM(amount) WHERE amount > :min GROUP BY status ORDER BY status ASC")
+    List<StatusStats> statsByStatusFiltered(@Param("min") double minAmount);
+
+    @Query("SELECT status, COUNT(this) GROUP BY status ORDER BY COUNT(this) DESC")
+    List<StatusCount> countGroupByStatusOrderByCount();
+
+    // --- #8v3 Multi-field GROUP BY ---
+
+    @Query("SELECT status, customerId, COUNT(this) GROUP BY status, customerId")
+    List<StatusCustomerCount> countByStatusAndCustomer();
+
+    @Query("SELECT status, customerId, COUNT(this) GROUP BY status, customerId ORDER BY status ASC, customerId ASC")
+    List<StatusCustomerCount> countByStatusAndCustomerSorted();
+
+    @Query("SELECT status, customerId, COUNT(this) WHERE amount > :minAmount GROUP BY status, customerId ORDER BY COUNT(this) DESC")
+    List<StatusCustomerCount> countByStatusAndCustomerFiltered(@Param("minAmount") double minAmount);
+
+    // --- GAP-A2 HAVING ---
+
+    @Query("SELECT status, COUNT(this) GROUP BY status HAVING COUNT(this) > :minCount")
+    List<StatusCount> statusesWithMinCount(@Param("minCount") long minCount);
+
+    @Query("SELECT status, COUNT(this), SUM(amount) GROUP BY status HAVING SUM(amount) >= :minTotal ORDER BY SUM(amount) DESC")
+    List<StatusStats> statusesWithMinTotal(@Param("minTotal") double minTotal);
+
+    @Query("SELECT status, COUNT(this) GROUP BY status HAVING COUNT(this) >= 5")
+    List<StatusCount> statusesWithAtLeast5();
+
+    @Query("SELECT status, COUNT(this), SUM(amount) GROUP BY status HAVING COUNT(this) > :minCount AND SUM(amount) >= :minTotal")
+    List<StatusStats> statusesWithMultipleHaving(@Param("minCount") long minCount, @Param("minTotal") double minTotal);
+
+    // --- HAVING OR ---
+
+    @Query("SELECT status, COUNT(this), SUM(amount) GROUP BY status HAVING COUNT(this) > :minCount OR SUM(amount) >= :minTotal")
+    List<StatusStats> statusesWithCountOrTotal(@Param("minCount") long minCount, @Param("minTotal") double minTotal);
+
+    // --- GAP-A3: COUNT(field) NULL filtering ---
+
+    @Query("SELECT status, COUNT(customerId) GROUP BY status")
+    List<StatusCount> countNonNullCustomerByStatus();
+
+    // --- GAP-A8: Pagination with GROUP BY ---
+
+    @Query("SELECT status, COUNT(this) GROUP BY status ORDER BY status ASC")
+    Page<StatusCount> countGroupByStatusPaged(PageRequest pageRequest);
 }

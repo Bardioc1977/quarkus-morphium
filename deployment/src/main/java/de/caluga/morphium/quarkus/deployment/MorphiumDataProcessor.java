@@ -460,7 +460,7 @@ public class MorphiumDataProcessor {
             if (repoInterface != null) {
                 Set<String> entityFields = collectEntityFields(
                         index.getClassByName(DotName.createSimple(entityClassName)), index);
-                generateCustomQueryMethods(cc, repoInterface, index, entityClassName, entityFields);
+                generateCustomQueryMethods(cc, repoInterface, index, entityClassName, entityFields, reflectiveClasses);
             }
 
             log.info("Generated repository implementation: {}", implClassName);
@@ -751,7 +751,8 @@ public class MorphiumDataProcessor {
                                             ClassInfo repoInterface,
                                             IndexView index,
                                             String entityClassName,
-                                            Set<String> entityFields) {
+                                            Set<String> entityFields,
+                                            BuildProducer<ReflectiveClassBuildItem> reflectiveClasses) {
         for (MethodInfo method : repoInterface.methods()) {
             String name = method.name();
 
@@ -762,7 +763,7 @@ public class MorphiumDataProcessor {
 
             // Phase 5: @Query with JDQL
             if (method.hasAnnotation(QUERY_ANNOTATION)) {
-                generateQueryAnnotatedMethod(cc, method, entityClassName);
+                generateQueryAnnotatedMethod(cc, method, entityClassName, index, reflectiveClasses);
                 continue;
             }
 
@@ -1328,7 +1329,9 @@ public class MorphiumDataProcessor {
      * Special parameters (Sort, Order, PageRequest, Limit) are detected by type.
      */
     private void generateQueryAnnotatedMethod(ClassCreator cc, MethodInfo method,
-                                               String entityClassName) {
+                                               String entityClassName,
+                                               IndexView index,
+                                               BuildProducer<ReflectiveClassBuildItem> reflectiveClasses) {
         // Extract JDQL string from @Query annotation
         AnnotationInstance queryAnn = method.annotation(QUERY_ANNOTATION);
         String jdql = queryAnn.value().asString();
@@ -1396,6 +1399,43 @@ public class MorphiumDataProcessor {
         boolean returnsBoolean = effectiveReturnType.kind() == Type.Kind.PRIMITIVE
                 && effectiveReturnType.asPrimitiveType().primitive() == PrimitiveType.Primitive.BOOLEAN;
 
+        // Detect Record return type for GROUP BY support
+        String resultRecordClass = null;
+        if (isList(effectiveReturnType) && effectiveReturnType.kind() == Type.Kind.PARAMETERIZED_TYPE) {
+            Type innerType = effectiveReturnType.asParameterizedType().arguments().get(0);
+            DotName innerTypeName = innerType.name();
+            if (!innerTypeName.toString().equals(entityClassName)) {
+                ClassInfo innerClassInfo = index.getClassByName(innerTypeName);
+                if (innerClassInfo != null
+                        && innerClassInfo.superName() != null
+                        && innerClassInfo.superName().toString().equals("java.lang.Record")) {
+                    resultRecordClass = innerTypeName.toString();
+                    reflectiveClasses.produce(
+                            ReflectiveClassBuildItem.builder(resultRecordClass)
+                                    .constructors(true).methods(true).build());
+                }
+            }
+        }
+
+        // Also detect Record for Page<Record> return types (GROUP BY pagination)
+        if (resultRecordClass == null
+                && effectiveReturnType.name().equals(PAGE_TYPE)
+                && effectiveReturnType.kind() == Type.Kind.PARAMETERIZED_TYPE) {
+            Type innerType = effectiveReturnType.asParameterizedType().arguments().get(0);
+            DotName innerTypeName = innerType.name();
+            if (!innerTypeName.toString().equals(entityClassName)) {
+                ClassInfo innerClassInfo = index.getClassByName(innerTypeName);
+                if (innerClassInfo != null
+                        && innerClassInfo.superName() != null
+                        && innerClassInfo.superName().toString().equals("java.lang.Record")) {
+                    resultRecordClass = innerTypeName.toString();
+                    reflectiveClasses.produce(
+                            ReflectiveClassBuildItem.builder(resultRecordClass)
+                                    .constructors(true).methods(true).build());
+                }
+            }
+        }
+
         // Build parameter type descriptors
         String[] paramTypeNames = new String[method.parametersCount()];
         for (int i = 0; i < method.parametersCount(); i++) {
@@ -1432,7 +1472,8 @@ public class MorphiumDataProcessor {
                             int.class, int.class, int.class, int.class,
                             Object[].class,
                             boolean.class, boolean.class, boolean.class, boolean.class,
-                            boolean.class, String.class, boolean.class),
+                            boolean.class, String.class, boolean.class,
+                            String.class),
                     mc.getThis(),
                     mc.load(jdql),
                     mc.load(paramMapSpec.toString()),
@@ -1447,7 +1488,8 @@ public class MorphiumDataProcessor {
                     mc.load(returnsOptional),
                     mc.load(returnsCursoredPage),
                     mc.load(orderBySpec),
-                    mc.load(returnsStream));
+                    mc.load(returnsStream),
+                    resultRecordClass != null ? mc.load(resultRecordClass) : mc.loadNull());
 
             // Unbox primitive return types (skip for async — returns CompletionStage)
             if (!isAsync && returnType.kind() == Type.Kind.PRIMITIVE) {

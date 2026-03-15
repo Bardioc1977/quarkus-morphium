@@ -28,7 +28,7 @@ import java.util.regex.Pattern;
  *   <li>String literals: {@code field = 'value'}</li>
  *   <li>NOT prefix: {@code NOT field = :param} / {@code NOT field LIKE :pattern}</li>
  * </ul>
- * Not supported: JOINs, GROUP BY, HAVING, subqueries, parenthesized NOT.
+ * Not supported: JOINs, subqueries, parenthesized NOT.
  */
 public final class JdqlParser {
 
@@ -57,7 +57,7 @@ public final class JdqlParser {
      */
     public static JdqlQuery parse(String jdql) {
         if (jdql == null || jdql.isBlank()) {
-            return new JdqlQuery(null, null, List.of(), JdqlQuery.Combinator.AND, List.of());
+            return new JdqlQuery(null, null, List.of(), JdqlQuery.Combinator.AND, List.of(), null, null, JdqlQuery.Combinator.AND);
         }
 
         String trimmed = jdql.trim();
@@ -66,6 +66,7 @@ public final class JdqlParser {
         // --- Parse SELECT clause ---
         List<String> selectFields = null;
         List<JdqlQuery.AggregateFunction> aggregateFunctions = null;
+        List<String> selectPlainFields = null; // non-null when SELECT mixes aggs + plain fields
         if (upper.startsWith("SELECT ")) {
             int selectEnd = findSelectEnd(upper);
             String selectPart = trimmed.substring("SELECT ".length(), selectEnd).trim();
@@ -89,12 +90,11 @@ public final class JdqlParser {
                 }
             }
 
+            // Defer validation of mixed agg+fields — GROUP BY may legitimize it
             if (!aggFuncs.isEmpty() && !plainFields.isEmpty()) {
-                throw new IllegalArgumentException(
-                        "Mixing aggregate functions and field projections requires GROUP BY (not supported in v1): " + selectPart);
-            }
-
-            if (!aggFuncs.isEmpty()) {
+                aggregateFunctions = aggFuncs;
+                selectPlainFields = plainFields;
+            } else if (!aggFuncs.isEmpty()) {
                 aggregateFunctions = aggFuncs;
             } else {
                 selectFields = plainFields;
@@ -112,9 +112,13 @@ public final class JdqlParser {
             }
         }
 
-        // --- From here, the remainder is [WHERE ...] [ORDER BY ...] ---
+        // --- From here, the remainder is [WHERE ...] [GROUP BY ...] [ORDER BY ...] ---
         if (trimmed.isEmpty()) {
-            return new JdqlQuery(selectFields, aggregateFunctions, List.of(), JdqlQuery.Combinator.AND, List.of());
+            if (selectPlainFields != null) {
+                throw new IllegalArgumentException(
+                        "Mixing aggregate functions and field projections requires GROUP BY: " + jdql);
+            }
+            return new JdqlQuery(selectFields, aggregateFunctions, List.of(), JdqlQuery.Combinator.AND, List.of(), null, null, JdqlQuery.Combinator.AND);
         }
 
         // Split off ORDER BY
@@ -128,6 +132,64 @@ public final class JdqlParser {
             orderBy = parseOrderBy(orderPart);
         }
 
+        // Split off GROUP BY from the remainder (ORDER BY already removed)
+        List<String> groupByFields = null;
+        String whereUpper = wherePart.toUpperCase(Locale.ROOT);
+        int groupByIdx = whereUpper.indexOf(" GROUP BY ");
+        if (groupByIdx < 0 && whereUpper.startsWith("GROUP BY ")) {
+            groupByIdx = 0;
+        }
+        List<JdqlQuery.HavingCondition> havingConditions = null;
+        JdqlQuery.Combinator havingCombinator = JdqlQuery.Combinator.AND;
+        if (groupByIdx >= 0) {
+            String groupByPart;
+            if (groupByIdx == 0) {
+                groupByPart = wherePart.substring("GROUP BY ".length()).trim();
+                wherePart = "";
+            } else {
+                groupByPart = wherePart.substring(groupByIdx + " GROUP BY ".length()).trim();
+                wherePart = wherePart.substring(0, groupByIdx).trim();
+            }
+
+            // Split HAVING from GROUP BY part (ORDER BY already removed)
+            String groupByUpper2 = groupByPart.toUpperCase(Locale.ROOT);
+            int havingIdx = groupByUpper2.indexOf(" HAVING ");
+            if (havingIdx >= 0) {
+                String havingPart = groupByPart.substring(havingIdx + " HAVING ".length()).trim();
+                groupByPart = groupByPart.substring(0, havingIdx).trim();
+                HavingParseResult havingResult = parseHavingClause(havingPart);
+                havingConditions = havingResult.conditions();
+                havingCombinator = havingResult.combinator();
+            }
+
+            groupByFields = Arrays.stream(groupByPart.split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .toList();
+        }
+
+        // Validate GROUP BY constraints
+        if (groupByFields != null) {
+            if (aggregateFunctions == null || aggregateFunctions.isEmpty()) {
+                throw new IllegalArgumentException("GROUP BY without aggregate functions: " + jdql);
+            }
+            if (selectPlainFields != null) {
+                for (String f : selectPlainFields) {
+                    if (!groupByFields.contains(f)) {
+                        throw new IllegalArgumentException(
+                                "SELECT field '" + f + "' must appear in GROUP BY clause: " + jdql);
+                    }
+                }
+            }
+            if (havingConditions != null && !havingConditions.isEmpty()
+                    && (groupByFields == null || groupByFields.isEmpty())) {
+                throw new IllegalArgumentException("HAVING without GROUP BY: " + jdql);
+            }
+        } else if (selectPlainFields != null) {
+            throw new IllegalArgumentException(
+                    "Mixing aggregate functions and field projections requires GROUP BY: " + jdql);
+        }
+
         // Strip leading WHERE keyword
         if (wherePart.toUpperCase(Locale.ROOT).startsWith("WHERE ")) {
             wherePart = wherePart.substring(6).trim();
@@ -135,7 +197,7 @@ public final class JdqlParser {
 
         // If empty after stripping WHERE, no conditions
         if (wherePart.isEmpty()) {
-            return new JdqlQuery(selectFields, aggregateFunctions, List.of(), JdqlQuery.Combinator.AND, orderBy);
+            return new JdqlQuery(selectFields, aggregateFunctions, List.of(), JdqlQuery.Combinator.AND, orderBy, groupByFields, havingConditions, havingCombinator);
         }
 
         // Determine combinator and split conditions
@@ -155,7 +217,7 @@ public final class JdqlParser {
             conditions.add(parseCondition(condStr.trim()));
         }
 
-        return new JdqlQuery(selectFields, aggregateFunctions, conditions, combinator, orderBy);
+        return new JdqlQuery(selectFields, aggregateFunctions, conditions, combinator, orderBy, groupByFields, havingConditions, havingCombinator);
     }
 
     // -- SELECT clause helpers --
@@ -168,18 +230,22 @@ public final class JdqlParser {
         int fromIdx = indexOfKeyword(upper, " FROM ");
         int whereIdx = indexOfKeyword(upper, " WHERE ");
         int orderByIdx = indexOfKeyword(upper, " ORDER BY ");
-        int end = smallestPositive(fromIdx, whereIdx, orderByIdx);
+        int groupByIdx = indexOfKeyword(upper, " GROUP BY ");
+        int havingIdx = indexOfKeyword(upper, " HAVING ");
+        int end = smallestPositive(fromIdx, whereIdx, orderByIdx, groupByIdx, havingIdx);
         return end > 0 ? end : upper.length();
     }
 
     /**
      * Finds the end of the FROM clause (the entity name after FROM).
-     * FROM clause ends at WHERE, ORDER BY, or end of string.
+     * FROM clause ends at WHERE, ORDER BY, GROUP BY, HAVING, or end of string.
      */
     private static int findFromEnd(String upper) {
         int whereIdx = indexOfKeyword(upper, " WHERE ");
         int orderByIdx = indexOfKeyword(upper, " ORDER BY ");
-        int end = smallestPositive(whereIdx, orderByIdx, -1);
+        int groupByIdx = indexOfKeyword(upper, " GROUP BY ");
+        int havingIdx = indexOfKeyword(upper, " HAVING ");
+        int end = smallestPositive(whereIdx, orderByIdx, groupByIdx, havingIdx);
         return end > 0 ? end : upper.length();
     }
 
@@ -187,11 +253,11 @@ public final class JdqlParser {
         return upper.indexOf(keyword);
     }
 
-    private static int smallestPositive(int a, int b, int c) {
+    private static int smallestPositive(int... values) {
         int min = Integer.MAX_VALUE;
-        if (a > 0) min = Math.min(min, a);
-        if (b > 0) min = Math.min(min, b);
-        if (c > 0) min = Math.min(min, c);
+        for (int v : values) {
+            if (v > 0) min = Math.min(min, v);
+        }
         return min == Integer.MAX_VALUE ? -1 : min;
     }
 
@@ -396,5 +462,58 @@ public final class JdqlParser {
         // Check that there's no other AND between BETWEEN and this AND
         String betweenToAnd = before.substring(betweenIdx + "BETWEEN".length());
         return !betweenToAnd.contains(" AND ");
+    }
+
+    // -- HAVING parsing --
+
+    private record HavingParseResult(List<JdqlQuery.HavingCondition> conditions,
+                                      JdqlQuery.Combinator combinator) {}
+
+    private static HavingParseResult parseHavingClause(String havingPart) {
+        List<JdqlQuery.HavingCondition> conditions = new ArrayList<>();
+        JdqlQuery.Combinator combinator = JdqlQuery.Combinator.AND;
+        List<String> parts;
+
+        if (containsTopLevelOr(havingPart)) {
+            combinator = JdqlQuery.Combinator.OR;
+            parts = splitTopLevel(havingPart, "OR");
+        } else {
+            parts = splitTopLevel(havingPart, "AND");
+        }
+
+        for (String part : parts) {
+            conditions.add(parseHavingCondition(part.trim()));
+        }
+        return new HavingParseResult(conditions, combinator);
+    }
+
+    private static JdqlQuery.HavingCondition parseHavingCondition(String cond) {
+        Pattern havingPattern = Pattern.compile(
+                "(?i)(COUNT|SUM|AVG|MIN|MAX)\\s*\\(\\s*([a-zA-Z_][a-zA-Z0-9_.]*|this)\\s*\\)" +
+                "\\s*(>=|<=|<>|!=|>|<|=)\\s*(.+)");
+        Matcher m = havingPattern.matcher(cond.trim());
+        if (!m.matches()) {
+            throw new IllegalArgumentException("Cannot parse HAVING condition: " + cond
+                    + ". Expected: AGGREGATE(field) operator value");
+        }
+
+        String funcName = m.group(1).toUpperCase(Locale.ROOT);
+        String argName = m.group(2);
+        String opStr = m.group(3);
+        String valueRef = m.group(4).trim();
+
+        String aggFuncStr = funcName + "(" + argName + ")";
+
+        JdqlQuery.Operator operator = switch (opStr) {
+            case "=" -> JdqlQuery.Operator.EQ;
+            case "<>", "!=" -> JdqlQuery.Operator.NE;
+            case ">" -> JdqlQuery.Operator.GT;
+            case ">=" -> JdqlQuery.Operator.GTE;
+            case "<" -> JdqlQuery.Operator.LT;
+            case "<=" -> JdqlQuery.Operator.LTE;
+            default -> throw new IllegalArgumentException("Unknown HAVING operator: " + opStr);
+        };
+
+        return new JdqlQuery.HavingCondition(aggFuncStr, operator, extractParamOrLiteral(valueRef));
     }
 }

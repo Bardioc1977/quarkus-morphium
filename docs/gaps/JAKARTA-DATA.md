@@ -18,7 +18,7 @@ generation -- no runtime reflection, GraalVM native-image compatible.
 | Repository interfaces | Full | `DataRepository`, `BasicRepository`, `CrudRepository`, `MorphiumRepository` |
 | CRUD annotations | Full | `@Insert`, `@Update`, `@Save`, `@Delete`, `@Find` |
 | Query derivation | Good | 15+ operators: Equals, Not, GT/GTE/LT/LTE, Between, In, NotIn, Like, StartsWith, EndsWith, Null, NotNull, True, False |
-| JDQL (`@Query`) | Good | WHERE, ORDER BY, BETWEEN, IN, LIKE, IS NULL, named params, SELECT projection, aggregate functions (COUNT/SUM/AVG/MIN/MAX). No GROUP BY/HAVING. |
+| JDQL (`@Query`) | Good | WHERE, ORDER BY, BETWEEN, IN, LIKE, IS NULL, named params, SELECT projection, aggregate functions (COUNT/SUM/AVG/MIN/MAX), GROUP BY (single + multi-field), HAVING. |
 | Return types | Good | `List<T>`, `Stream<T>`, `Optional<T>`, `Page<T>`, `CompletionStage<X>`, `long`, `boolean`, `void`, single `T` |
 | Sorting | Full | `Sort<T>`, `Order<T>`, `@OrderBy`, JDQL ORDER BY |
 | Pagination | Good | `PageRequest`, `Limit`, `MorphiumPage<T>`. No keyset/cursor pagination |
@@ -103,142 +103,71 @@ generation -- no runtime reflection, GraalVM native-image compatible.
 ### Larger Effort (3+ days)
 
 #### #8 JDQL Aggregate Functions
-- **Status:** DONE (v1 — global aggregation without GROUP BY)
+- **Status:** DONE (v3 — global aggregation + single/multi-field GROUP BY + HAVING)
 - **Gap:** `COUNT()`, `SUM()`, `AVG()`, `MIN()`, `MAX()` not supported in JDQL
 - **Impact:** Analytics queries require dropping down to Morphium Aggregation API
 - **Effort:** 2-3 days
-- **Files:** `JdqlQuery.java`, `JdqlParser.java`, `JdqlMethodBridge.java`
+- **Files:** `JdqlQuery.java`, `JdqlParser.java`, `JdqlMethodBridge.java`, `MorphiumDataProcessor.java`
 - **v1 supports:** `SELECT COUNT(this)`, `SELECT SUM(field)`, `SELECT AVG(field)`, `SELECT MIN(field)`, `SELECT MAX(field)` with WHERE clauses. Return types: `long` for COUNT, `double` for SUM/AVG/MIN/MAX.
-- **v1 limitations:**
-  - No GROUP BY (requires DTO/Record return types — own ticket)
-  - No HAVING (depends on GROUP BY)
-  - `COUNT(field)` behaves like `COUNT(this)` (doesn't filter null values)
-  - No mixed SELECT (aggregate + field projections)
+- **v2 adds:** Single-field GROUP BY with Java Record return type mapping. `SELECT status, COUNT(this), SUM(amount) GROUP BY status` returns `List<StatusStats>`. ORDER BY with GROUP BY (field + aggregate references). WHERE + GROUP BY.
+- **v3 adds:** Multi-field GROUP BY (`GROUP BY status, customerId`) with compound `_id` → `$project` promotion. HAVING with comparison operators, named params, numeric literals, and AND/OR-combined conditions. HAVING filters are emitted as separate `$match` stages (AND) or a single `$match` with `$or` array (OR) after `$group`.
+- **v4 adds:** `COUNT(field)` NULL filtering via `$addFields` + `$cond`/`$ne` before `$group`. `Page<Record>` pagination for GROUP BY queries (Java-level, avoids InMemAggregator `$skip` bug). HAVING OR combinator.
+- **Remaining limitations:**
   - No `COUNT(DISTINCT ...)` or expressions inside aggregates
-  - ORDER BY and pagination are ignored (single-result global aggregation)
 
 ##### #8 v1 Known Gaps (GAP-A1 through GAP-A8)
 
 These are **deliberate scope decisions** for the v1 implementation, not bugs.
 Each gap documents: what's missing, why, the required effort, and workarounds.
 
-###### GAP-A1: No GROUP BY
+###### GAP-A1: GROUP BY (single + multi-field) — DONE
 
-**What's missing:** `SELECT status, COUNT(this) FROM Order GROUP BY status` — grouping by
-fields with per-group aggregation.
-
-**Why not in v1:**
-- GROUP BY requires **DTO/Record return types** (e.g. `record StatusCount(String status, long count)`)
-  because the result is no longer an entity
-- `MorphiumDataProcessor` would need build-time Record analysis: discover constructor parameters,
-  match them by name/position to aggregate result fields, generate mapping bytecode
-- MongoDB `$group` with `_id: "$status"` returns `List<Map>` — these must be mapped to DTOs
-- The Gizmo bytecode for Record instantiation needs `MethodDescriptor` for the canonical constructor
-
-**Effort:** 2–3 days (the Record mapping infrastructure is reusable for GAP-A5)
-
-**MongoDB pipeline equivalent:**
-```json
-[
-  { "$group": { "_id": "$status", "count": { "$sum": 1 } } },
-  { "$project": { "status": "$_id", "count": 1, "_id": 0 } }
-]
-```
-
-**Workaround:** Use Morphium Aggregation API directly:
-```java
-@Inject Morphium morphium;
-var agg = morphium.createAggregator(OrderEntity.class, Map.class);
-agg.group("$status").sum("count", 1).end();
-List<Map<String, Object>> results = agg.aggregateMap();
-```
-
-**Implementation notes for v2:**
-- New record in `JdqlQuery`: `GroupBySpec(List<String> groupFields)`
-- Parser: detect `GROUP BY` keyword after WHERE clause
-- `JdqlMethodBridge.executeAggregate()`: set `_id` to group field(s) instead of `null`
-- New helper: `mapAggregateResultToRecord(Map<String,Object>, Class<R> recordType)`
-- `MorphiumDataProcessor`: detect Record return type, generate mapping bytecode
+**Implemented in v2 (single-field) and v3 (multi-field).** `SELECT status, COUNT(this) GROUP BY status`
+and `SELECT status, customerId, COUNT(this) GROUP BY status, customerId` both work with Java Record
+return types. Record component order must match SELECT clause order (group fields first, then aggregates).
+Multi-field GROUP BY uses compound `_id` maps with a `$project` stage to promote sub-fields to top level.
 
 ---
 
-###### GAP-A2: No HAVING
+###### GAP-A2: HAVING — DONE
 
-**What's missing:** `SELECT status, COUNT(this) FROM Order GROUP BY status HAVING COUNT(this) > 5`
+**Implemented in v3 (AND), extended in v4 (OR).** `SELECT status, COUNT(this) GROUP BY status HAVING COUNT(this) > 5` works.
+Supports comparison operators (`>`, `>=`, `<`, `<=`, `=`, `!=`), named parameters (`:param`),
+numeric literals, and both AND and OR combinators.
 
-**Why not in v1:** HAVING is a post-group filter. Without GROUP BY (GAP-A1) it's meaningless.
-MongoDB implements this as a `$match` stage **after** `$group`.
-
-**Depends on:** GAP-A1
-
-**Effort:** 0.5 days once GAP-A1 is done
-
-**MongoDB pipeline equivalent:**
-```json
-[
-  { "$group": { "_id": "$status", "cnt": { "$sum": 1 } } },
-  { "$match": { "cnt": { "$gt": 5 } } }
-]
-```
+- **AND** (default): conditions are emitted as separate `$match` stages after `$group` (one per condition)
+  to work around an InMemoryDriver limitation where multi-field `$match` documents short-circuit
+  on the first matching field (fix submitted as morphium PR #151).
+- **OR**: conditions are emitted as a single `$match` stage with a `$or` array.
+  Example: `HAVING COUNT(this) > 5 OR SUM(amount) >= 1000`.
 
 ---
 
-###### GAP-A3: COUNT(field) Does Not Filter NULL Values
+###### GAP-A3: COUNT(field) NULL Filtering — DONE
 
-**What's missing:** `SELECT COUNT(customerId) WHERE status = 'OPEN'` should count only
-documents where `customerId IS NOT NULL` (standard SQL COUNT semantics). Our v1 counts
-**all** matching documents (identical to `COUNT(this)`).
+**Implemented in v4.** `SELECT COUNT(customerId) WHERE status = 'OPEN'` now correctly counts only
+documents where `customerId IS NOT NULL` (standard SQL COUNT semantics).
 
-**Why not in v1:**
-- Correct implementation requires `$cond` in the `$group` accumulator:
-  ```json
-  { "$group": { "_id": null, "agg_0": { "$sum": { "$cond": [{ "$ne": ["$customerId", null] }, 1, 0] } } } }
-  ```
-- Morphium's `Group.sum()` accepts only simple field references or constants, not `$cond` expressions
-- Alternative: add an extra `$match` stage with `{field: {$ne: null}}` — but this distorts the
-  WHERE semantics when other aggregates run in parallel (they'd also be filtered)
-
-**Effort:** 0.5 days — requires either `Group.sum(String, Map)` for raw expressions, or a
-raw pipeline stage via `Aggregator.addOperator()`
-
-**Behaviour in v1:** `COUNT(field)` is treated identically to `COUNT(this)`.
+**Implementation:** An `$addFields` stage is inserted before `$group` that creates a helper field
+(`_cnt_notnull_N`) using `$cond`/`$ne` to produce 1 for non-null values and 0 for null.
+The `$group` accumulator then sums this helper field instead of a constant 1.
+This avoids modifying `Group.sum()` and works with the InMemory driver (which evaluates
+`$cond` via `Expr.evaluate()`).
 
 ---
 
-###### GAP-A4: No Mixed SELECT (Aggregate + Field Projections)
+###### GAP-A4: Mixed SELECT (Aggregate + Field Projections) — DONE
 
-**What's missing:** `SELECT status, SUM(amount) WHERE ...` — mixing normal fields and
-aggregate functions in the same SELECT clause.
-
-**Why not in v1:**
-- Mixed SELECT only makes sense with GROUP BY (e.g. `SELECT status, SUM(amount) GROUP BY status`)
-- Without GROUP BY the result is undefined: which `status` value should be returned alongside
-  a global SUM?
-- Depends on GAP-A1 (GROUP BY) and GAP-A5 (DTO mapping)
-
-**Behaviour in v1:** `IllegalArgumentException` with message:
-"Mixing aggregate functions and field projections requires GROUP BY (not supported in v1)"
+**Implemented in v2.** `SELECT status, SUM(amount) GROUP BY status` works when all plain
+fields appear in GROUP BY. Without GROUP BY, mixing still throws `IllegalArgumentException`.
 
 ---
 
-###### GAP-A5: No DTO/Record Return Types for Aggregate Results
+###### GAP-A5: Record Return Types for GROUP BY — DONE
 
-**What's missing:** Instead of `Object[]` for multiple aggregates, a type-safe Record like
-`record OrderStats(long count, double totalAmount)` would be preferable.
-
-**Why not in v1:**
-- Requires build-time analysis of the Record type and mapping aggregate results to Record fields
-- Field order in the Record must match the SELECT order
-- Shared infrastructure with GAP-A1 (GROUP BY also needs Record mapping)
-
-**Effort:** 1–2 days (combined with GAP-A1)
-
-**Workaround:**
-```java
-@Query("SELECT COUNT(this), SUM(amount) WHERE status = :s")
-Object[] countAndSum(@Param("s") String status);
-// Object[0] = Long (count), Object[1] = Double (sum)
-```
+**Implemented in v2.** `List<RecordType>` return types are detected at build time via
+Jandex (`superName == java.lang.Record`). Record canonical constructor is invoked via
+reflection at runtime. Record component order must match SELECT clause order.
 
 ---
 
@@ -265,28 +194,29 @@ Object[] countAndSum(@Param("s") String status);
 
 ---
 
-###### GAP-A7: ORDER BY Ignored for Aggregates
+###### GAP-A7: ORDER BY with GROUP BY — DONE
 
-**What's missing:** `SELECT SUM(amount) WHERE status = :s ORDER BY amount` — ORDER BY
-combined with aggregate queries.
-
-**Why irrelevant in v1:** Global aggregation (`_id: null`) produces exactly **one** result.
-Sorting a single result is a no-op. ORDER BY is silently ignored for aggregate queries.
-
-**Becomes relevant with GROUP BY (GAP-A1):**
-`SELECT status, SUM(amount) GROUP BY status ORDER BY SUM(amount) DESC` — requires a
-`$sort` stage after `$group`. The sort field must reference the aggregate alias.
+**Implemented in v2.** ORDER BY in GROUP BY queries adds a `$sort` stage after `$group`.
+Supports sorting by group fields (mapped to `_id`) and aggregate function references
+(e.g. `ORDER BY COUNT(this) DESC`). ORDER BY is still ignored for global aggregation
+(single result).
 
 ---
 
-###### GAP-A8: No Pagination for Aggregates
+###### GAP-A8: Pagination for GROUP BY Aggregates — DONE
 
-**What's missing:** `PageRequest` / `CursoredPage` in combination with aggregate queries.
+**Implemented in v4.** `Page<Record>` return type with `PageRequest` parameter now works
+for GROUP BY queries. Example: `Page<StatusCount> countGroupByStatusPaged(PageRequest pageRequest)`.
 
-**Why irrelevant in v1:** Same as GAP-A7 — global aggregation returns 1 result. Pagination
-is only meaningful with GROUP BY (GAP-A1) when there are many groups.
+**Implementation:** Pagination is applied in Java after the full aggregation completes
+(slice the mapped result list) rather than via `$skip`/`$limit` pipeline stages.
+This is a deliberate workaround for an InMemAggregator `$skip` bug
+(line 1316: `data.subList(idx, data.size() - idx)` — incorrect, should be `data.subList(idx, data.size())`).
 
-**Behaviour in v1:** `PageRequest` parameter is ignored for aggregate queries.
+**Build-time:** `Page<Record>` return types are now detected by `MorphiumDataProcessor` via Jandex,
+extending the existing `List<Record>` detection to also cover parameterized `Page<T>` types.
+
+**Note:** `CursoredPage<Record>` is not yet supported for GROUP BY queries.
 
 ---
 

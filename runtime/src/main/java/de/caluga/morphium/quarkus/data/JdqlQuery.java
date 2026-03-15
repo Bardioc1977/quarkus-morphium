@@ -7,13 +7,17 @@ import java.util.List;
  * Created by {@link JdqlParser} from a {@code @Query} annotation value.
  *
  * @param selectFields projected field names from SELECT clause, null or empty = all fields
+ * @param groupByFields fields from GROUP BY clause, null when no GROUP BY
  */
 public record JdqlQuery(
         List<String> selectFields,
         List<AggregateFunction> aggregateFunctions,
         List<JdqlCondition> conditions,
         Combinator combinator,
-        List<OrderSpec> orderBy
+        List<OrderSpec> orderBy,
+        List<String> groupByFields,
+        List<HavingCondition> havingConditions,
+        Combinator havingCombinator
 ) {
 
     public enum Combinator { AND, OR }
@@ -54,4 +58,17 @@ public record JdqlQuery(
     }
 
     public record OrderSpec(String field, boolean ascending) {}
+
+    /**
+     * A single HAVING condition referencing an aggregate result.
+     *
+     * @param aggregateFunction canonical form, e.g. "COUNT(this)" or "SUM(amount)"
+     * @param operator          comparison operator
+     * @param valueRef          parameter reference (":name") or numeric literal string
+     */
+    public record HavingCondition(
+            String aggregateFunction,
+            Operator operator,
+            String valueRef
+    ) {}
 }
