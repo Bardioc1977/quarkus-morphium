@@ -5,12 +5,19 @@ import de.caluga.morphium.query.Query;
 import jakarta.data.Limit;
 import jakarta.data.Order;
 import jakarta.data.Sort;
+import jakarta.data.exceptions.EmptyResultException;
+import jakarta.data.exceptions.NonUniqueResultException;
 import jakarta.data.page.Page;
 import jakarta.data.page.PageRequest;
+import jakarta.data.page.impl.CursoredPageRecord;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.stream.Stream;
 
 /**
@@ -35,7 +42,10 @@ public final class FindMethodBridge {
      * @param pageRequestParamIndex index of PageRequest parameter, -1 if absent
      * @param limitParamIndex    index of Limit parameter, -1 if absent
      * @param args               the method arguments
-     * @param returnsSingle      true if method returns a single entity (not List/Stream/Page)
+     * @param returnsSingle      true if method returns a single entity T (not List/Stream/Page/Optional)
+     * @param returnsOptional    true if method returns Optional&lt;T&gt;
+     * @param returnsCursoredPage true if method returns CursoredPage&lt;T&gt;
+     * @param returnsStream      true if method returns Stream&lt;T&gt;
      * @return the query result
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -47,7 +57,10 @@ public final class FindMethodBridge {
                                      int pageRequestParamIndex,
                                      int limitParamIndex,
                                      Object[] args,
-                                     boolean returnsSingle) {
+                                     boolean returnsSingle,
+                                     boolean returnsOptional,
+                                     boolean returnsCursoredPage,
+                                     boolean returnsStream) {
         Morphium morphium = repo.getMorphium();
         Class entityClass = repo.getMetadata().entityClass();
         Query query = morphium.createQueryFor(entityClass);
@@ -106,9 +119,15 @@ public final class FindMethodBridge {
             query.limit(limit.maxResults());
         }
 
-        // Apply PageRequest parameter → return Page<T>
+        // Apply PageRequest parameter → return Page<T> or CursoredPage<T>
         if (pageRequestParamIndex >= 0 && args[pageRequestParamIndex] != null) {
             PageRequest pageRequest = (PageRequest) args[pageRequestParamIndex];
+
+            if (returnsCursoredPage) {
+                return executeCursoredFind(query, pageRequest, conditionsSpec, orderBySpec,
+                        morphium, entityClass, args);
+            }
+
             int size = pageRequest.size();
             long page = pageRequest.page();
             int skip = (int) ((page - 1) * size);
@@ -132,10 +151,76 @@ public final class FindMethodBridge {
         }
 
         // Execute
+        if (returnsOptional) {
+            return QueryResultHelper.optionalSingle(query);
+        }
         if (returnsSingle) {
-            return query.get();
+            return QueryResultHelper.requireSingle(query);
+        }
+        if (returnsStream) {
+            return query.stream();
         }
         return query.asList();
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static Object executeCursoredFind(Query query, PageRequest pageRequest,
+                                               String conditionsSpec, String orderBySpec,
+                                               Morphium morphium, Class entityClass,
+                                               Object[] args) {
+        List<CursorHelper.SortSpec> sortSpecs = CursorHelper.parseSortSpecs(orderBySpec);
+        boolean isForward = pageRequest.mode() != PageRequest.Mode.CURSOR_PREVIOUS;
+
+        if (pageRequest.mode() != PageRequest.Mode.OFFSET) {
+            // Cursor-based: apply cursor condition and adjusted sort
+            PageRequest.Cursor cursor = pageRequest.cursor()
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "PageRequest mode is " + pageRequest.mode() + " but no cursor provided"));
+            CursorHelper.applyCursorCondition(query, cursor, sortSpecs, morphium, entityClass, isForward);
+        }
+
+        // Apply sort (inverted for CURSOR_PREVIOUS)
+        CursorHelper.applySort(query, sortSpecs, morphium, entityClass, isForward);
+        // Fetch one extra to determine hasNext precisely
+        int requestedSize = pageRequest.size();
+        query.limit(requestedSize + 1);
+
+        List content = query.asList();
+        boolean hasMore = content.size() > requestedSize;
+        if (hasMore) {
+            content = new ArrayList(content.subList(0, requestedSize));
+        }
+        if (!isForward) {
+            Collections.reverse(content);
+        }
+
+        // Extract cursors for each row
+        List<String> sortFields = sortSpecs.stream().map(CursorHelper.SortSpec::javaField).toList();
+        List<PageRequest.Cursor> cursors = CursorHelper.extractCursors(content, sortFields, morphium, entityClass);
+
+        long totalElements = -1;
+        if (pageRequest.requestTotal()) {
+            Query countQuery = morphium.createQueryFor(entityClass);
+            if (!conditionsSpec.isEmpty()) {
+                for (String p : conditionsSpec.split(",")) {
+                    String[] fieldAndIdx = p.split(":");
+                    String mongoField = resolveMongoField(morphium, entityClass, fieldAndIdx[0]);
+                    countQuery.f(mongoField).eq(args[Integer.parseInt(fieldAndIdx[1])]);
+                }
+            }
+            totalElements = countQuery.countAll();
+        }
+
+        boolean isFirstPage = pageRequest.mode() == PageRequest.Mode.OFFSET;
+        boolean isLastPage = !hasMore;
+
+        if (content.isEmpty()) {
+            return new CursoredPageRecord<>(content, cursors, totalElements, pageRequest,
+                    (PageRequest) null, (PageRequest) null);
+        }
+
+        return new CursoredPageRecord<>(content, cursors, totalElements, pageRequest,
+                isFirstPage, isLastPage);
     }
 
     /**
@@ -167,6 +252,25 @@ public final class FindMethodBridge {
         for (Object entity : toDelete) {
             morphium.delete(entity);
         }
+    }
+
+    public static CompletionStage<Object> executeFindAsync(AbstractMorphiumRepository<?, ?> repo,
+                                                              String conditionsSpec,
+                                                              String orderBySpec,
+                                                              int sortParamIndex,
+                                                              int orderParamIndex,
+                                                              int pageRequestParamIndex,
+                                                              int limitParamIndex,
+                                                              Object[] args,
+                                                              boolean returnsSingle,
+                                                              boolean returnsOptional,
+                                                              boolean returnsCursoredPage,
+                                                              boolean returnsStream) {
+        return CompletableFuture.supplyAsync(
+                () -> executeFind(repo, conditionsSpec, orderBySpec, sortParamIndex, orderParamIndex,
+                        pageRequestParamIndex, limitParamIndex, args, returnsSingle, returnsOptional,
+                        returnsCursoredPage, returnsStream),
+                repo.getAsyncExecutor());
     }
 
     @SuppressWarnings("unchecked")

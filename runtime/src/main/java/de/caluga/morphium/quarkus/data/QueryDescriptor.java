@@ -18,7 +18,7 @@ public record QueryDescriptor(
 
     public enum Combinator { AND, OR }
 
-    public enum ReturnType { SINGLE, LIST, STREAM, COUNT, BOOLEAN }
+    public enum ReturnType { SINGLE, OPTIONAL, LIST, STREAM, COUNT, BOOLEAN }
 
     public record Condition(
             String field,
@@ -34,8 +34,9 @@ public record QueryDescriptor(
     public enum Operator {
         EQ, NE, GT, GTE, LT, LTE, BETWEEN,
         IN, NIN,
-        LIKE, STARTS_WITH, ENDS_WITH,
-        IS_NULL, IS_NOT_NULL, IS_TRUE, IS_FALSE
+        LIKE, STARTS_WITH, ENDS_WITH, CONTAINS, NOT_CONTAINS,
+        IS_NULL, IS_NOT_NULL, IS_TRUE, IS_FALSE,
+        IS_EMPTY, IS_NOT_EMPTY, SIZE, MATCHES, IGNORE_CASE
     }
 
     public record OrderSpec(String field, Direction direction) {}

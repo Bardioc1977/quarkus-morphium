@@ -41,6 +41,7 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Modifier;
 import java.util.*;
+import java.util.concurrent.CompletionStage;
 import java.util.stream.Stream;
 
 /**
@@ -97,6 +98,8 @@ public class MorphiumDataProcessor {
     private static final DotName PAGE_REQUEST_TYPE = DotName.createSimple("jakarta.data.page.PageRequest");
     private static final DotName LIMIT_TYPE = DotName.createSimple("jakarta.data.Limit");
     private static final DotName PAGE_TYPE = DotName.createSimple("jakarta.data.page.Page");
+    private static final DotName CURSORED_PAGE_TYPE = DotName.createSimple("jakarta.data.page.CursoredPage");
+    private static final DotName COMPLETION_STAGE_TYPE = DotName.createSimple("java.util.concurrent.CompletionStage");
 
     // Metamodel types
     private static final String STATIC_METAMODEL_ANN = "jakarta.data.metamodel.StaticMetamodel";
@@ -426,11 +429,16 @@ public class MorphiumDataProcessor {
                 generateFindById(cc);
                 generateFindAll(cc);
                 generateFindAllPaged(cc);
+                // Check if repo declares findAll returning CursoredPage
+                if (repoInterface != null && hasFindAllCursored(repoInterface)) {
+                    generateFindAllCursored(cc);
+                }
                 generateSave(cc);
                 generateSaveAll(cc);
                 generateDelete(cc);
                 generateDeleteById(cc);
                 generateDeleteAll(cc);
+                generateDeleteAllNoArg(cc);
             }
 
             // CrudRepository methods
@@ -534,6 +542,49 @@ public class MorphiumDataProcessor {
         }
     }
 
+    private boolean hasFindAllCursored(ClassInfo repoInterface) {
+        for (MethodInfo method : repoInterface.methods()) {
+            if ("findAll".equals(method.name())
+                    && method.returnType().name().equals(CURSORED_PAGE_TYPE)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void generateFindAllCursored(ClassCreator cc) {
+        // CursoredPage<T> findAll(PageRequest pageRequest, Order<T> sortBy)
+        String cursoredPageClass = "jakarta.data.page.CursoredPage";
+        String pageRequestClass = "jakarta.data.page.PageRequest";
+        String orderClass = "jakarta.data.Order";
+        try (MethodCreator mc = cc.getMethodCreator("findAll", cursoredPageClass,
+                pageRequestClass, orderClass)) {
+            mc.setModifiers(Modifier.PUBLIC);
+            ResultHandle result = mc.invokeVirtualMethod(
+                    MethodDescriptor.ofMethod(AbstractMorphiumRepository.class,
+                            "doFindAllCursored", "jakarta.data.page.CursoredPage",
+                            "jakarta.data.page.PageRequest", "jakarta.data.Order"),
+                    mc.getThis(), mc.getMethodParam(0), mc.getMethodParam(1));
+            mc.returnValue(result);
+        }
+    }
+
+    private void warnIfMissingIdInOrderBy(MethodInfo method, String orderBySpec,
+                                           String entityClassName, Set<String> entityFields) {
+        // Check if "id" field is included in the orderBy spec
+        Set<String> orderByFields = new HashSet<>();
+        for (String part : orderBySpec.split(",")) {
+            String[] fieldAndDir = part.split(":");
+            orderByFields.add(fieldAndDir[0]);
+        }
+        if (!orderByFields.contains("id")) {
+            log.warn("CursoredPage method {}.{} has @OrderBy {} but does not include the @Id field 'id'. "
+                            + "Without a unique tie-breaker, cursor-based pagination may produce duplicate or missing results. "
+                            + "Consider adding @OrderBy(\"id\") as last sort criterion.",
+                    method.declaringClass().name(), method.name(), orderByFields);
+        }
+    }
+
     private void generateSave(ClassCreator cc) {
         // <S extends T> S save(S entity)
         try (MethodCreator mc = cc.getMethodCreator("save", Object.class, Object.class)) {
@@ -590,6 +641,18 @@ public class MorphiumDataProcessor {
                     MethodDescriptor.ofMethod(AbstractMorphiumRepository.class,
                             "doDeleteAll", void.class, List.class),
                     mc.getThis(), mc.getMethodParam(0));
+            mc.returnVoid();
+        }
+    }
+
+    private void generateDeleteAllNoArg(ClassCreator cc) {
+        // void deleteAll() — no-arg, clears entire collection
+        try (MethodCreator mc = cc.getMethodCreator("deleteAll", void.class)) {
+            mc.setModifiers(Modifier.PUBLIC);
+            mc.invokeVirtualMethod(
+                    MethodDescriptor.ofMethod(AbstractMorphiumRepository.class,
+                            "doDeleteAllNoArg", void.class),
+                    mc.getThis());
             mc.returnVoid();
         }
     }
@@ -739,19 +802,30 @@ public class MorphiumDataProcessor {
                                      Set<String> entityFields) {
         String methodName = method.name();
 
+        // Detect async: CompletionStage<X> → unwrap X as effective return type
+        Type returnType = method.returnType();
+        boolean isAsync = isCompletionStage(returnType);
+        Type effectiveReturnType = isAsync ? unwrapCompletionStage(returnType) : returnType;
+
+        // Strip "Async" suffix for parsing (e.g. "findByStatusAsync" → "findByStatus")
+        String parseableName = isAsync && methodName.endsWith("Async")
+                ? methodName.substring(0, methodName.length() - 5) : methodName;
+
         // Parse method name at build time to validate it
         QueryDescriptor descriptor;
         try {
-            descriptor = MethodNameParser.parse(methodName, entityFields);
+            descriptor = MethodNameParser.parse(parseableName, entityFields);
         } catch (IllegalArgumentException e) {
             throw new IllegalStateException(
                     "Failed to parse repository method " + method.declaringClass().name()
                     + "." + methodName + ": " + e.getMessage(), e);
         }
 
-        // Determine return type for the descriptor
-        Type returnType = method.returnType();
-        boolean returnsSingle = !isList(returnType) && !isStream(returnType)
+        // Determine return type for the descriptor (based on effective/inner type)
+        boolean returnsOptional = isOptional(effectiveReturnType);
+        boolean returnsStream = isStream(effectiveReturnType);
+        boolean returnsSingle = !isList(effectiveReturnType) && !returnsStream
+                && !returnsOptional
                 && descriptor.prefix() == QueryDescriptor.Prefix.FIND;
 
         // Build actual parameter type descriptors from the Jandex method info
@@ -778,27 +852,61 @@ public class MorphiumDataProcessor {
                 mc.writeArrayValue(argsArray, i, param);
             }
 
-            ResultHandle methodNameHandle = mc.load(methodName);
+            // Determine if this is a deleteBy* returning boolean (needs count-to-boolean conversion)
+            boolean returnsBoolean = effectiveReturnType.kind() == Type.Kind.PRIMITIVE
+                    && effectiveReturnType.asPrimitiveType().primitive() == PrimitiveType.Primitive.BOOLEAN
+                    && descriptor.prefix() == QueryDescriptor.Prefix.DELETE;
+
+            ResultHandle methodNameHandle = mc.load(parseableName);
             ResultHandle returnsSingleHandle = mc.load(returnsSingle);
+            ResultHandle returnsOptionalHandle = mc.load(returnsOptional);
+            ResultHandle returnsBooleanHandle = mc.load(returnsBoolean);
+            ResultHandle returnsStreamHandle = mc.load(returnsStream);
             ResultHandle thisHandle = mc.getThis();
 
-            ResultHandle result = mc.invokeStaticMethod(
-                    MethodDescriptor.ofMethod(
-                            QueryMethodBridge.class,
-                            "executeQuery",
-                            Object.class,
-                            AbstractMorphiumRepository.class,
-                            String.class,
-                            Object[].class,
-                            boolean.class),
-                    thisHandle, methodNameHandle, argsArray, returnsSingleHandle);
+            String bridgeMethod = isAsync ? "executeQueryAsync" : "executeQuery";
+            Class<?> bridgeReturnType = isAsync ? CompletionStage.class : Object.class;
 
-            // Unbox/cast the result to the declared return type
-            if (returnType.kind() == Type.Kind.PRIMITIVE) {
-                result = unboxPrimitive(mc, result, returnType.asPrimitiveType());
+            // Handle void return type (e.g., void deleteByStatus(...))
+            if (returnType.kind() == Type.Kind.VOID) {
+                mc.invokeStaticMethod(
+                        MethodDescriptor.ofMethod(
+                                QueryMethodBridge.class,
+                                "executeQuery",
+                                Object.class,
+                                AbstractMorphiumRepository.class,
+                                String.class,
+                                Object[].class,
+                                boolean.class,
+                                boolean.class,
+                                boolean.class,
+                                boolean.class),
+                        thisHandle, methodNameHandle, argsArray, returnsSingleHandle,
+                        returnsOptionalHandle, returnsBooleanHandle, returnsStreamHandle);
+                mc.returnVoid();
+            } else {
+                ResultHandle result = mc.invokeStaticMethod(
+                        MethodDescriptor.ofMethod(
+                                QueryMethodBridge.class,
+                                bridgeMethod,
+                                bridgeReturnType,
+                                AbstractMorphiumRepository.class,
+                                String.class,
+                                Object[].class,
+                                boolean.class,
+                                boolean.class,
+                                boolean.class,
+                                boolean.class),
+                        thisHandle, methodNameHandle, argsArray, returnsSingleHandle,
+                        returnsOptionalHandle, returnsBooleanHandle, returnsStreamHandle);
+
+                // Unbox/cast the result to the declared return type (skip for async — returns CompletionStage)
+                if (!isAsync && returnType.kind() == Type.Kind.PRIMITIVE) {
+                    result = unboxPrimitive(mc, result, returnType.asPrimitiveType());
+                }
+
+                mc.returnValue(result);
             }
-
-            mc.returnValue(result);
         }
     }
 
@@ -921,10 +1029,24 @@ public class MorphiumDataProcessor {
         // Build orderBy spec from @OrderBy annotations
         String orderBySpec = buildOrderBySpec(method);
 
-        // Determine return type
+        // Detect async: CompletionStage<X> → unwrap X as effective return type
         Type returnType = method.returnType();
-        boolean returnsSingle = !isList(returnType) && !isStream(returnType)
-                && !returnType.name().equals(PAGE_TYPE);
+        boolean isAsync = isCompletionStage(returnType);
+        Type effectiveReturnType = isAsync ? unwrapCompletionStage(returnType) : returnType;
+
+        // Determine return type (based on effective/inner type)
+        boolean returnsOptional = isOptional(effectiveReturnType);
+        boolean returnsCursoredPage = effectiveReturnType.name().equals(CURSORED_PAGE_TYPE);
+        boolean returnsStream = isStream(effectiveReturnType);
+        boolean returnsSingle = !isList(effectiveReturnType) && !returnsStream
+                && !returnsOptional
+                && !effectiveReturnType.name().equals(PAGE_TYPE)
+                && !returnsCursoredPage;
+
+        // Warn if CursoredPage method lacks @Id field in @OrderBy
+        if (returnsCursoredPage && !orderBySpec.isEmpty()) {
+            warnIfMissingIdInOrderBy(method, orderBySpec, entityClassName, entityFields);
+        }
 
         // Build parameter type descriptors
         String[] paramTypeNames = new String[method.parametersCount()];
@@ -932,6 +1054,9 @@ public class MorphiumDataProcessor {
             paramTypeNames[i] = toDescriptorName(method.parameterType(i));
         }
         String returnTypeName = toDescriptorName(returnType);
+
+        String bridgeMethod = isAsync ? "executeFindAsync" : "executeFind";
+        Class<?> bridgeReturnType = isAsync ? CompletionStage.class : Object.class;
 
         try (MethodCreator mc = cc.getMethodCreator(
                 MethodDescriptor.ofMethod(cc.getClassName(), method.name(),
@@ -952,12 +1077,12 @@ public class MorphiumDataProcessor {
             ResultHandle result = mc.invokeStaticMethod(
                     MethodDescriptor.ofMethod(
                             FindMethodBridge.class,
-                            "executeFind",
-                            Object.class,
+                            bridgeMethod,
+                            bridgeReturnType,
                             AbstractMorphiumRepository.class,
                             String.class, String.class,
                             int.class, int.class, int.class, int.class,
-                            Object[].class, boolean.class),
+                            Object[].class, boolean.class, boolean.class, boolean.class, boolean.class),
                     mc.getThis(),
                     mc.load(conditionsSpec.toString()),
                     mc.load(orderBySpec),
@@ -966,16 +1091,20 @@ public class MorphiumDataProcessor {
                     mc.load(pageRequestParamIndex),
                     mc.load(limitParamIndex),
                     argsArray,
-                    mc.load(returnsSingle));
+                    mc.load(returnsSingle),
+                    mc.load(returnsOptional),
+                    mc.load(returnsCursoredPage),
+                    mc.load(returnsStream));
 
-            if (returnType.kind() == Type.Kind.PRIMITIVE) {
+            if (!isAsync && returnType.kind() == Type.Kind.PRIMITIVE) {
                 result = unboxPrimitive(mc, result, returnType.asPrimitiveType());
             }
 
             mc.returnValue(result);
         }
 
-        log.info("Generated @Find method: {}.{}", method.declaringClass().name(), method.name());
+        log.info("Generated @Find method: {}.{}{}", method.declaringClass().name(), method.name(),
+                isAsync ? " (async)" : "");
     }
 
     /**
@@ -1246,14 +1375,26 @@ public class MorphiumDataProcessor {
             }
         }
 
-        // Determine return type characteristics
+        // Build orderBy spec from @OrderBy annotations (used by CursoredPage)
+        String orderBySpec = buildOrderBySpec(method);
+
+        // Detect async: CompletionStage<X> → unwrap X as effective return type
         Type returnType = method.returnType();
-        boolean returnsSingle = !isList(returnType) && !isStream(returnType)
-                && !returnType.name().equals(PAGE_TYPE);
-        boolean returnsCount = returnType.kind() == Type.Kind.PRIMITIVE
-                && returnType.asPrimitiveType().primitive() == PrimitiveType.Primitive.LONG;
-        boolean returnsBoolean = returnType.kind() == Type.Kind.PRIMITIVE
-                && returnType.asPrimitiveType().primitive() == PrimitiveType.Primitive.BOOLEAN;
+        boolean isAsync = isCompletionStage(returnType);
+        Type effectiveReturnType = isAsync ? unwrapCompletionStage(returnType) : returnType;
+
+        // Determine return type characteristics (based on effective/inner type)
+        boolean returnsOptional = isOptional(effectiveReturnType);
+        boolean returnsCursoredPage = effectiveReturnType.name().equals(CURSORED_PAGE_TYPE);
+        boolean returnsStream = isStream(effectiveReturnType);
+        boolean returnsSingle = !isList(effectiveReturnType) && !returnsStream
+                && !returnsOptional
+                && !effectiveReturnType.name().equals(PAGE_TYPE)
+                && !returnsCursoredPage;
+        boolean returnsCount = effectiveReturnType.kind() == Type.Kind.PRIMITIVE
+                && effectiveReturnType.asPrimitiveType().primitive() == PrimitiveType.Primitive.LONG;
+        boolean returnsBoolean = effectiveReturnType.kind() == Type.Kind.PRIMITIVE
+                && effectiveReturnType.asPrimitiveType().primitive() == PrimitiveType.Primitive.BOOLEAN;
 
         // Build parameter type descriptors
         String[] paramTypeNames = new String[method.parametersCount()];
@@ -1261,6 +1402,9 @@ public class MorphiumDataProcessor {
             paramTypeNames[i] = toDescriptorName(method.parameterType(i));
         }
         String returnTypeName = toDescriptorName(returnType);
+
+        String bridgeMethod = isAsync ? "executeJdqlAsync" : "executeJdql";
+        Class<?> bridgeReturnType = isAsync ? CompletionStage.class : Object.class;
 
         try (MethodCreator mc = cc.getMethodCreator(
                 MethodDescriptor.ofMethod(cc.getClassName(), method.name(),
@@ -1281,13 +1425,14 @@ public class MorphiumDataProcessor {
             ResultHandle result = mc.invokeStaticMethod(
                     MethodDescriptor.ofMethod(
                             JdqlMethodBridge.class,
-                            "executeJdql",
-                            Object.class,
+                            bridgeMethod,
+                            bridgeReturnType,
                             AbstractMorphiumRepository.class,
                             String.class, String.class,
                             int.class, int.class, int.class, int.class,
                             Object[].class,
-                            boolean.class, boolean.class, boolean.class),
+                            boolean.class, boolean.class, boolean.class, boolean.class,
+                            boolean.class, String.class, boolean.class),
                     mc.getThis(),
                     mc.load(jdql),
                     mc.load(paramMapSpec.toString()),
@@ -1298,17 +1443,22 @@ public class MorphiumDataProcessor {
                     argsArray,
                     mc.load(returnsSingle),
                     mc.load(returnsCount),
-                    mc.load(returnsBoolean));
+                    mc.load(returnsBoolean),
+                    mc.load(returnsOptional),
+                    mc.load(returnsCursoredPage),
+                    mc.load(orderBySpec),
+                    mc.load(returnsStream));
 
-            // Unbox primitive return types
-            if (returnType.kind() == Type.Kind.PRIMITIVE) {
+            // Unbox primitive return types (skip for async — returns CompletionStage)
+            if (!isAsync && returnType.kind() == Type.Kind.PRIMITIVE) {
                 result = unboxPrimitive(mc, result, returnType.asPrimitiveType());
             }
 
             mc.returnValue(result);
         }
 
-        log.info("Generated @Query method: {}.{} → JDQL: {}", method.declaringClass().name(), method.name(), jdql);
+        log.info("Generated @Query method: {}.{}{} → JDQL: {}", method.declaringClass().name(), method.name(),
+                isAsync ? " (async)" : "", jdql);
     }
 
     /**
@@ -1461,6 +1611,26 @@ public class MorphiumDataProcessor {
 
     private boolean isStream(Type type) {
         return type.name().toString().equals("java.util.stream.Stream");
+    }
+
+    private boolean isOptional(Type type) {
+        return type.name().toString().equals("java.util.Optional");
+    }
+
+    private boolean isCompletionStage(Type type) {
+        return type.name().equals(COMPLETION_STAGE_TYPE);
+    }
+
+    /**
+     * If the type is {@code CompletionStage<X>}, returns the inner type X.
+     * Otherwise returns null.
+     */
+    private Type unwrapCompletionStage(Type type) {
+        if (!isCompletionStage(type)) return null;
+        if (type.kind() == Type.Kind.PARAMETERIZED_TYPE) {
+            return type.asParameterizedType().arguments().get(0);
+        }
+        return null;
     }
 
     // -- Generic signature builder --

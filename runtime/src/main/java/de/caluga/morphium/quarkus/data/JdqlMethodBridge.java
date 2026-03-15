@@ -11,6 +11,8 @@ import jakarta.data.page.PageRequest;
 import jakarta.data.page.impl.CursoredPageRecord;
 
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -409,6 +411,28 @@ public final class JdqlMethodBridge {
             return (n instanceof Integer || n instanceof Long) ? n.longValue() : n.doubleValue();
         }
         return value;
+    }
+
+    public static CompletionStage<Object> executeJdqlAsync(AbstractMorphiumRepository<?, ?> repo,
+                                                              String jdql,
+                                                              String paramMapSpec,
+                                                              int sortParamIndex,
+                                                              int orderParamIndex,
+                                                              int pageRequestParamIndex,
+                                                              int limitParamIndex,
+                                                              Object[] args,
+                                                              boolean returnsSingle,
+                                                              boolean returnsCount,
+                                                              boolean returnsBoolean,
+                                                              boolean returnsOptional,
+                                                              boolean returnsCursoredPage,
+                                                              String orderBySpec,
+                                                              boolean returnsStream) {
+        return CompletableFuture.supplyAsync(
+                () -> executeJdql(repo, jdql, paramMapSpec, sortParamIndex, orderParamIndex,
+                        pageRequestParamIndex, limitParamIndex, args, returnsSingle, returnsCount,
+                        returnsBoolean, returnsOptional, returnsCursoredPage, orderBySpec, returnsStream),
+                repo.getAsyncExecutor());
     }
 
     @SuppressWarnings("unchecked")

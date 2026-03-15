@@ -4,11 +4,16 @@ import de.caluga.morphium.Morphium;
 import de.caluga.morphium.query.Query;
 import jakarta.data.Order;
 import jakarta.data.Sort;
+import jakarta.data.page.CursoredPage;
 import jakarta.data.page.Page;
 import jakarta.data.page.PageRequest;
+import jakarta.data.page.impl.CursoredPageRecord;
 import jakarta.inject.Inject;
 
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Executor;
 import java.util.stream.Stream;
 
 /**
@@ -55,7 +60,7 @@ public abstract class AbstractMorphiumRepository<T, K> {
     }
 
     public Stream<T> doFindAll() {
-        return morphium.readAll(entityClass()).stream();
+        return morphium.createQueryFor(entityClass()).stream();
     }
 
     @SuppressWarnings("unchecked")
@@ -87,6 +92,60 @@ public abstract class AbstractMorphiumRepository<T, K> {
         }
 
         return new MorphiumPage<>(content, totalElements, pageRequest);
+    }
+
+    @SuppressWarnings("unchecked")
+    public CursoredPage<T> doFindAllCursored(PageRequest pageRequest, Order<T> sortBy) {
+        Query<T> query = morphium.createQueryFor(entityClass());
+
+        // Build sort specs from Order
+        List<CursorHelper.SortSpec> sortSpecs = new ArrayList<>();
+        if (sortBy != null && !sortBy.sorts().isEmpty()) {
+            for (Sort<? super T> sort : sortBy.sorts()) {
+                sortSpecs.add(new CursorHelper.SortSpec(sort.property(), sort.isAscending()));
+            }
+        }
+
+        boolean isForward = pageRequest.mode() != PageRequest.Mode.CURSOR_PREVIOUS;
+
+        if (pageRequest.mode() != PageRequest.Mode.OFFSET) {
+            PageRequest.Cursor cursor = pageRequest.cursor()
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "PageRequest mode is " + pageRequest.mode() + " but no cursor provided"));
+            CursorHelper.applyCursorCondition(query, cursor, sortSpecs, morphium, entityClass(), isForward);
+        }
+
+        CursorHelper.applySort(query, sortSpecs, morphium, entityClass(), isForward);
+        int requestedSize = pageRequest.size();
+        query.limit(requestedSize + 1);
+
+        List<T> content = query.asList();
+        boolean hasMore = content.size() > requestedSize;
+        if (hasMore) {
+            content = new ArrayList<>(content.subList(0, requestedSize));
+        }
+        if (!isForward) {
+            Collections.reverse(content);
+        }
+
+        List<String> sortFields = sortSpecs.stream().map(CursorHelper.SortSpec::javaField).toList();
+        List<PageRequest.Cursor> cursors = CursorHelper.extractCursors(content, sortFields, morphium, entityClass());
+
+        long totalElements = -1;
+        if (pageRequest.requestTotal()) {
+            totalElements = morphium.createQueryFor(entityClass()).countAll();
+        }
+
+        boolean isFirstPage = pageRequest.mode() == PageRequest.Mode.OFFSET;
+        boolean isLastPage = !hasMore;
+
+        if (content.isEmpty()) {
+            return new CursoredPageRecord<>(content, cursors, totalElements, pageRequest,
+                    (PageRequest) null, (PageRequest) null);
+        }
+
+        return new CursoredPageRecord<>(content, cursors, totalElements, pageRequest,
+                isFirstPage, isLastPage);
     }
 
     public Object doSave(Object entity) {
@@ -141,6 +200,10 @@ public abstract class AbstractMorphiumRepository<T, K> {
         }
     }
 
+    public void doDeleteAllNoArg() {
+        morphium.clearCollection(entityClass());
+    }
+
     public Query<T> createQuery() {
         return morphium.createQueryFor(entityClass());
     }
@@ -168,5 +231,51 @@ public abstract class AbstractMorphiumRepository<T, K> {
         } catch (Exception e) {
             return javaFieldName;
         }
+    }
+
+    // -- Async support --------------------------------------------------------
+
+    public Executor getAsyncExecutor() {
+        return morphium.getAsyncOperationsThreadPool();
+    }
+
+    public CompletionStage<Optional<T>> doFindByIdAsync(K id) {
+        return CompletableFuture.supplyAsync(() -> doFindById(id), getAsyncExecutor());
+    }
+
+    public CompletionStage<Stream<T>> doFindAllAsync() {
+        return CompletableFuture.supplyAsync(this::doFindAll, getAsyncExecutor());
+    }
+
+    public CompletionStage<Object> doSaveAsync(Object entity) {
+        return CompletableFuture.supplyAsync(() -> doSave(entity), getAsyncExecutor());
+    }
+
+    public CompletionStage<List<Object>> doSaveAllAsync(List<?> entities) {
+        return CompletableFuture.supplyAsync(() -> doSaveAll(entities), getAsyncExecutor());
+    }
+
+    public CompletionStage<Object> doInsertAsync(Object entity) {
+        return CompletableFuture.supplyAsync(() -> doInsert(entity), getAsyncExecutor());
+    }
+
+    public CompletionStage<List<Object>> doInsertAllAsync(List<?> entities) {
+        return CompletableFuture.supplyAsync(() -> doInsertAll(entities), getAsyncExecutor());
+    }
+
+    public CompletionStage<Object> doUpdateAsync(Object entity) {
+        return CompletableFuture.supplyAsync(() -> doUpdate(entity), getAsyncExecutor());
+    }
+
+    public CompletionStage<List<Object>> doUpdateAllAsync(List<?> entities) {
+        return CompletableFuture.supplyAsync(() -> doUpdateAll(entities), getAsyncExecutor());
+    }
+
+    public CompletionStage<Void> doDeleteAsync(Object entity) {
+        return CompletableFuture.runAsync(() -> doDelete(entity), getAsyncExecutor());
+    }
+
+    public CompletionStage<Void> doDeleteByIdAsync(K id) {
+        return CompletableFuture.runAsync(() -> doDeleteById(id), getAsyncExecutor());
     }
 }

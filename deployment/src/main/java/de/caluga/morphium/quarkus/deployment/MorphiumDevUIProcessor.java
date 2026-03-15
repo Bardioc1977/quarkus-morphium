@@ -23,6 +23,7 @@ import io.quarkus.devui.spi.page.CardPageBuildItem;
 import io.quarkus.devui.spi.page.Page;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -52,6 +53,15 @@ public class MorphiumDevUIProcessor {
 
         CardPageBuildItem card = new CardPageBuildItem();
 
+        // --- Library version labels (shown at card footer, like Kafka/ArC) ---
+        card.addLibraryVersion("de.caluga", "morphium",
+                "Morphium", "https://github.com/sboesebeck/morphium");
+        card.addLibraryVersion("io.quarkiverse.morphium", "quarkus-morphium",
+                "Quarkus Morphium Extension", "https://github.com/Bardioc1977/quarkus-morphium");
+        card.addLibraryVersion("jakarta.data", "jakarta.data-api",
+                "Jakarta Data", "https://jakarta.ee/specifications/data/");
+
+        // --- MongoDB Connection page ---
         List<Map<String, String>> rows = new ArrayList<>();
         if (devConfig != null) {
             String shortId = containerId != null
@@ -60,20 +70,20 @@ public class MorphiumDevUIProcessor {
             String mode = devServicesConfig.replicaSet()
                     ? "Replica Set (transactions enabled)"
                     : "Standalone";
-            rows.add(Map.of("Property", "Hosts",        "Value", devConfig.getOrDefault("quarkus.morphium.hosts", "n/a")));
-            rows.add(Map.of("Property", "Database",     "Value", devConfig.getOrDefault("quarkus.morphium.database", "n/a")));
-            rows.add(Map.of("Property", "Mode",         "Value", mode));
-            rows.add(Map.of("Property", "Container ID", "Value", shortId));
-            rows.add(Map.of("Property", "Status",       "Value", "Running"));
+            rows.add(row("Hosts",        devConfig.getOrDefault("quarkus.morphium.hosts", "n/a")));
+            rows.add(row("Database",     devConfig.getOrDefault("quarkus.morphium.database", "n/a")));
+            rows.add(row("Mode",         mode));
+            rows.add(row("Container ID", shortId));
+            rows.add(row("Status",       "Running"));
         } else {
             String mode = devServicesConfig.replicaSet()
                     ? "Replica Set (transactions enabled)"
                     : "Standalone";
-            rows.add(Map.of("Property", "Hosts",        "Value", "n/a"));
-            rows.add(Map.of("Property", "Database",     "Value", "n/a"));
-            rows.add(Map.of("Property", "Mode",         "Value", mode));
-            rows.add(Map.of("Property", "Container ID", "Value", "n/a"));
-            rows.add(Map.of("Property", "Status",       "Value",
+            rows.add(row("Hosts",        "n/a"));
+            rows.add(row("Database",     "n/a"));
+            rows.add(row("Mode",         mode));
+            rows.add(row("Container ID", "n/a"));
+            rows.add(row("Status",
                     "Not started (Dev Services disabled, quarkus.morphium.hosts set, or container startup failed — check logs)"));
         }
         card.addBuildTimeData("connectionInfo", rows);
@@ -83,5 +93,13 @@ public class MorphiumDevUIProcessor {
                 .buildTimeDataKey("connectionInfo"));
 
         cardProducer.produce(card);
+    }
+
+    /** Creates a row map with guaranteed key order (Property first, Value second). */
+    private static Map<String, String> row(String property, String value) {
+        Map<String, String> map = new LinkedHashMap<>();
+        map.put("Property", property);
+        map.put("Value", value);
+        return map;
     }
 }

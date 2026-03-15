@@ -11,6 +11,7 @@ import jakarta.data.repository.Repository;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletionStage;
 import java.util.stream.Stream;
 
 /**
@@ -176,4 +177,23 @@ public interface OrderRepository extends BasicRepository<OrderEntity, String> {
 
     @Query("SELECT COUNT(this) WHERE amount > :minAmount")
     long countByAmountGreaterThan(@Param("minAmount") double minAmount);
+
+    // --- #9 Async (CompletionStage) Support ---
+
+    // Query derivation → async
+    CompletionStage<List<OrderEntity>> findByStatusAsync(String status);
+
+    CompletionStage<Optional<OrderEntity>> findByCustomerIdAsync(String customerId);
+
+    // @Find → async
+    @Find
+    @OrderBy("amount")
+    CompletionStage<List<OrderEntity>> findAsyncByStatus(@By("status") String status);
+
+    // @Query JDQL → async
+    @Query("WHERE status = :status ORDER BY amount ASC")
+    CompletionStage<List<OrderEntity>> queryByStatusAsync(@Param("status") String status);
+
+    @Query("SELECT COUNT(this) WHERE status = :status")
+    CompletionStage<Long> countByStatusAsync(@Param("status") String status);
 }

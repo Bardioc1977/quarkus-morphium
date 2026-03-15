@@ -19,7 +19,7 @@ generation -- no runtime reflection, GraalVM native-image compatible.
 | CRUD annotations | Full | `@Insert`, `@Update`, `@Save`, `@Delete`, `@Find` |
 | Query derivation | Good | 15+ operators: Equals, Not, GT/GTE/LT/LTE, Between, In, NotIn, Like, StartsWith, EndsWith, Null, NotNull, True, False |
 | JDQL (`@Query`) | Good | WHERE, ORDER BY, BETWEEN, IN, LIKE, IS NULL, named params, SELECT projection, aggregate functions (COUNT/SUM/AVG/MIN/MAX). No GROUP BY/HAVING. |
-| Return types | Good | `List<T>`, `Stream<T>`, `Optional<T>`, `Page<T>`, `long`, `boolean`, `void`, single `T` |
+| Return types | Good | `List<T>`, `Stream<T>`, `Optional<T>`, `Page<T>`, `CompletionStage<X>`, `long`, `boolean`, `void`, single `T` |
 | Sorting | Full | `Sort<T>`, `Order<T>`, `@OrderBy`, JDQL ORDER BY |
 | Pagination | Good | `PageRequest`, `Limit`, `MorphiumPage<T>`. No keyset/cursor pagination |
 | StaticMetamodel | Full | Auto-generated `Entity_` classes for type-safe field refs |
@@ -291,11 +291,18 @@ is only meaningful with GROUP BY (GAP-A1) when there are many groups.
 ---
 
 #### #9 `CompletionStage<T>` (Async Repositories)
-- **Status:** TODO
+- **Status:** DONE
 - **Gap:** No async/reactive return types. All repository methods are synchronous.
-- **Impact:** Blocks reactive Quarkus applications (Mutiny/SmallRye)
-- **Effort:** 3-5 days
-- **Files:** `MorphiumDataProcessor.java`, `AbstractMorphiumRepository.java`, new async bridges
+- **Impact:** Non-blocking repository methods for reactive Quarkus applications
+- **Effort:** 1 day
+- **Files:** `MorphiumDataProcessor.java`, `AbstractMorphiumRepository.java`, `QueryMethodBridge.java`, `FindMethodBridge.java`, `JdqlMethodBridge.java`
+- **What works:** `CompletionStage<List<T>>`, `CompletionStage<Optional<T>>`, `CompletionStage<Long>` (aggregates) for query derivation (`findBy*Async`), `@Find` annotated methods, and `@Query` JDQL methods.
+- **Convention:** Query derivation methods use `*Async` suffix (e.g. `findByStatusAsync`). The "Async" suffix is stripped before method name parsing.
+- **Implementation:** Async execution via `CompletableFuture.supplyAsync()` on Morphium's virtual-thread-backed `asyncOperationsThreadPool`.
+- **v1 limitations:**
+  - No `Uni<T>` / SmallRye Mutiny support (would need Mutiny dependency)
+  - No async CRUD methods (standard `findById`, `save`, etc.) — only custom query/find/jdql methods
+  - No `CompletionStage<Stream<T>>` (Stream is inherently pull-based, conflicts with async push model)
 
 ---
 

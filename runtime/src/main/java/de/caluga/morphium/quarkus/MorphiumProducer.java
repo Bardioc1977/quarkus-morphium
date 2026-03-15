@@ -187,6 +187,9 @@ public class MorphiumProducer {
         // TLS / X.509 settings
         configureSsl(cfg, config.ssl());
 
+        log.info("Quarkus Morphium Extension v{} (Morphium {}, Jakarta Data {})",
+            MorphiumVersion.extensionVersion(), MorphiumVersion.morphiumVersion(),
+            MorphiumVersion.jakartaDataVersion());
         log.info("Creating Morphium connection to database '{}' (hosts: {}, driver: {}, replicaSetName: {}, ssl: {})",
             config.database(), config.hosts(), config.driverName(),
             config.replicaSetName().orElse("(none)"),

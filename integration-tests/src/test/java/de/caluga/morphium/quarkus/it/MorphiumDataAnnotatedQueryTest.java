@@ -9,6 +9,7 @@ import org.junit.jupiter.api.*;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Integration tests for Jakarta Data Phase 4: @Find, @By, @OrderBy,
@@ -66,11 +67,10 @@ class MorphiumDataAnnotatedQueryTest {
 
     @Test
     @Order(3)
-    @DisplayName("@Find @By name returns null for non-existing")
+    @DisplayName("@Find @By name throws EmptyResultException for non-existing")
     void findOneByName_notFound() {
-        ItemEntity item = repository.findOneByName("NonExistent");
-
-        assertThat(item).isNull();
+        assertThatThrownBy(() -> repository.findOneByName("NonExistent"))
+                .isInstanceOf(jakarta.data.exceptions.EmptyResultException.class);
     }
 
     // -- @Find / @OrderBy tests --

@@ -18,6 +18,7 @@ package de.caluga.morphium.quarkus.it;
 import de.caluga.morphium.annotations.*;
 import de.caluga.morphium.annotations.lifecycle.*;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * Test entity used in query and LocalDateTime integration tests.
@@ -41,6 +42,12 @@ public class OrderEntity {
     @Property(fieldName = "created_at")
     private LocalDateTime createdAt;
 
+    @Property(fieldName = "tags")
+    private List<String> tags;
+
+    @Property(fieldName = "urgent")
+    private boolean urgent;
+
     @Version
     @Property(fieldName = "version")
     private long version;
@@ -60,6 +67,10 @@ public class OrderEntity {
     public void   setStatus(String s)            { this.status = s; }
     public LocalDateTime getCreatedAt()          { return createdAt; }
     public void   setCreatedAt(LocalDateTime d)  { this.createdAt = d; }
+    public List<String> getTags()                { return tags; }
+    public void   setTags(List<String> t)        { this.tags = t; }
+    public boolean isUrgent()                     { return urgent; }
+    public void   setUrgent(boolean u)           { this.urgent = u; }
     public long   getVersion()                   { return version; }
     public void   setVersion(long v)             { this.version = v; }
 }

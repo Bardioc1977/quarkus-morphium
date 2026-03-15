@@ -44,8 +44,9 @@ public final class QueryExecutor {
         // Execute based on prefix
         return switch (descriptor.prefix()) {
             case FIND -> switch (descriptor.returnType()) {
-                case SINGLE -> query.get();
-                case STREAM -> ((List) query.asList()).stream();
+                case SINGLE -> QueryResultHelper.requireSingle(query);
+                case OPTIONAL -> QueryResultHelper.optionalSingle(query);
+                case STREAM -> query.stream();
                 default -> query.asList();
             };
             case COUNT -> query.countAll();
@@ -122,6 +123,21 @@ public final class QueryExecutor {
             case ENDS_WITH -> {
                 String val = Pattern.quote(args[cond.paramIndex()].toString());
                 field.matches(Pattern.compile(val + "$"));
+            }
+            case CONTAINS -> field.eq(args[cond.paramIndex()]);
+            case NOT_CONTAINS -> field.ne(args[cond.paramIndex()]);
+            case IS_EMPTY -> field.size(0);
+            case IS_NOT_EMPTY -> {
+                // {$nor: [{field: {$size: 0}}]} — matches docs where array is not empty
+                Query sub = morphium.createQueryFor(entityClass);
+                sub.f(mongoField).size(0);
+                query.nor(sub);
+            }
+            case SIZE -> field.size(((Number) args[cond.paramIndex()]).intValue());
+            case MATCHES -> field.matches(args[cond.paramIndex()].toString());
+            case IGNORE_CASE -> {
+                String val = java.util.regex.Pattern.quote(args[cond.paramIndex()].toString());
+                field.matches("^" + val + "$", "i");
             }
             case IS_NULL -> field.eq(null);
             case IS_NOT_NULL -> field.ne(null);
