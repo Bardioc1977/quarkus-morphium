@@ -1,7 +1,7 @@
 # Jakarta Data 1.0 -- Gap Analysis & Improvement Roadmap
 
 > **quarkus-morphium** Jakarta Data provider
-> Last updated: 2026-03-14
+> Last updated: 2026-03-15
 
 ---
 
@@ -116,6 +116,179 @@ generation -- no runtime reflection, GraalVM native-image compatible.
   - No mixed SELECT (aggregate + field projections)
   - No `COUNT(DISTINCT ...)` or expressions inside aggregates
   - ORDER BY and pagination are ignored (single-result global aggregation)
+
+##### #8 v1 Known Gaps (GAP-A1 through GAP-A8)
+
+These are **deliberate scope decisions** for the v1 implementation, not bugs.
+Each gap documents: what's missing, why, the required effort, and workarounds.
+
+###### GAP-A1: No GROUP BY
+
+**What's missing:** `SELECT status, COUNT(this) FROM Order GROUP BY status` — grouping by
+fields with per-group aggregation.
+
+**Why not in v1:**
+- GROUP BY requires **DTO/Record return types** (e.g. `record StatusCount(String status, long count)`)
+  because the result is no longer an entity
+- `MorphiumDataProcessor` would need build-time Record analysis: discover constructor parameters,
+  match them by name/position to aggregate result fields, generate mapping bytecode
+- MongoDB `$group` with `_id: "$status"` returns `List<Map>` — these must be mapped to DTOs
+- The Gizmo bytecode for Record instantiation needs `MethodDescriptor` for the canonical constructor
+
+**Effort:** 2–3 days (the Record mapping infrastructure is reusable for GAP-A5)
+
+**MongoDB pipeline equivalent:**
+```json
+[
+  { "$group": { "_id": "$status", "count": { "$sum": 1 } } },
+  { "$project": { "status": "$_id", "count": 1, "_id": 0 } }
+]
+```
+
+**Workaround:** Use Morphium Aggregation API directly:
+```java
+@Inject Morphium morphium;
+var agg = morphium.createAggregator(OrderEntity.class, Map.class);
+agg.group("$status").sum("count", 1).end();
+List<Map<String, Object>> results = agg.aggregateMap();
+```
+
+**Implementation notes for v2:**
+- New record in `JdqlQuery`: `GroupBySpec(List<String> groupFields)`
+- Parser: detect `GROUP BY` keyword after WHERE clause
+- `JdqlMethodBridge.executeAggregate()`: set `_id` to group field(s) instead of `null`
+- New helper: `mapAggregateResultToRecord(Map<String,Object>, Class<R> recordType)`
+- `MorphiumDataProcessor`: detect Record return type, generate mapping bytecode
+
+---
+
+###### GAP-A2: No HAVING
+
+**What's missing:** `SELECT status, COUNT(this) FROM Order GROUP BY status HAVING COUNT(this) > 5`
+
+**Why not in v1:** HAVING is a post-group filter. Without GROUP BY (GAP-A1) it's meaningless.
+MongoDB implements this as a `$match` stage **after** `$group`.
+
+**Depends on:** GAP-A1
+
+**Effort:** 0.5 days once GAP-A1 is done
+
+**MongoDB pipeline equivalent:**
+```json
+[
+  { "$group": { "_id": "$status", "cnt": { "$sum": 1 } } },
+  { "$match": { "cnt": { "$gt": 5 } } }
+]
+```
+
+---
+
+###### GAP-A3: COUNT(field) Does Not Filter NULL Values
+
+**What's missing:** `SELECT COUNT(customerId) WHERE status = 'OPEN'` should count only
+documents where `customerId IS NOT NULL` (standard SQL COUNT semantics). Our v1 counts
+**all** matching documents (identical to `COUNT(this)`).
+
+**Why not in v1:**
+- Correct implementation requires `$cond` in the `$group` accumulator:
+  ```json
+  { "$group": { "_id": null, "agg_0": { "$sum": { "$cond": [{ "$ne": ["$customerId", null] }, 1, 0] } } } }
+  ```
+- Morphium's `Group.sum()` accepts only simple field references or constants, not `$cond` expressions
+- Alternative: add an extra `$match` stage with `{field: {$ne: null}}` — but this distorts the
+  WHERE semantics when other aggregates run in parallel (they'd also be filtered)
+
+**Effort:** 0.5 days — requires either `Group.sum(String, Map)` for raw expressions, or a
+raw pipeline stage via `Aggregator.addOperator()`
+
+**Behaviour in v1:** `COUNT(field)` is treated identically to `COUNT(this)`.
+
+---
+
+###### GAP-A4: No Mixed SELECT (Aggregate + Field Projections)
+
+**What's missing:** `SELECT status, SUM(amount) WHERE ...` — mixing normal fields and
+aggregate functions in the same SELECT clause.
+
+**Why not in v1:**
+- Mixed SELECT only makes sense with GROUP BY (e.g. `SELECT status, SUM(amount) GROUP BY status`)
+- Without GROUP BY the result is undefined: which `status` value should be returned alongside
+  a global SUM?
+- Depends on GAP-A1 (GROUP BY) and GAP-A5 (DTO mapping)
+
+**Behaviour in v1:** `IllegalArgumentException` with message:
+"Mixing aggregate functions and field projections requires GROUP BY (not supported in v1)"
+
+---
+
+###### GAP-A5: No DTO/Record Return Types for Aggregate Results
+
+**What's missing:** Instead of `Object[]` for multiple aggregates, a type-safe Record like
+`record OrderStats(long count, double totalAmount)` would be preferable.
+
+**Why not in v1:**
+- Requires build-time analysis of the Record type and mapping aggregate results to Record fields
+- Field order in the Record must match the SELECT order
+- Shared infrastructure with GAP-A1 (GROUP BY also needs Record mapping)
+
+**Effort:** 1–2 days (combined with GAP-A1)
+
+**Workaround:**
+```java
+@Query("SELECT COUNT(this), SUM(amount) WHERE status = :s")
+Object[] countAndSum(@Param("s") String status);
+// Object[0] = Long (count), Object[1] = Double (sum)
+```
+
+---
+
+###### GAP-A6: No DISTINCT or Expressions Inside Aggregates
+
+**What's missing:**
+- `SELECT COUNT(DISTINCT status) WHERE ...` — DISTINCT within aggregates
+- `SELECT SUM(amount * quantity) WHERE ...` — arithmetic expressions within aggregates
+
+**Why not in v1:**
+- DISTINCT requires `$addToSet` + `$size` in the pipeline — complex mapping
+- Expressions require `$multiply`/`$add` etc. inside `$group` accumulators
+- Parser would need to handle arithmetic expressions within function parentheses
+
+**Effort:** 2+ days
+
+**MongoDB pipeline for COUNT DISTINCT:**
+```json
+[
+  { "$group": { "_id": null, "distinctStatuses": { "$addToSet": "$status" } } },
+  { "$project": { "count": { "$size": "$distinctStatuses" } } }
+]
+```
+
+---
+
+###### GAP-A7: ORDER BY Ignored for Aggregates
+
+**What's missing:** `SELECT SUM(amount) WHERE status = :s ORDER BY amount` — ORDER BY
+combined with aggregate queries.
+
+**Why irrelevant in v1:** Global aggregation (`_id: null`) produces exactly **one** result.
+Sorting a single result is a no-op. ORDER BY is silently ignored for aggregate queries.
+
+**Becomes relevant with GROUP BY (GAP-A1):**
+`SELECT status, SUM(amount) GROUP BY status ORDER BY SUM(amount) DESC` — requires a
+`$sort` stage after `$group`. The sort field must reference the aggregate alias.
+
+---
+
+###### GAP-A8: No Pagination for Aggregates
+
+**What's missing:** `PageRequest` / `CursoredPage` in combination with aggregate queries.
+
+**Why irrelevant in v1:** Same as GAP-A7 — global aggregation returns 1 result. Pagination
+is only meaningful with GROUP BY (GAP-A1) when there are many groups.
+
+**Behaviour in v1:** `PageRequest` parameter is ignored for aggregate queries.
+
+---
 
 #### #9 `CompletionStage<T>` (Async Repositories)
 - **Status:** TODO
