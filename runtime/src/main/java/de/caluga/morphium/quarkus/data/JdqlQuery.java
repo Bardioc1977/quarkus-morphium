@@ -5,14 +5,22 @@ import java.util.List;
 /**
  * Parsed representation of a JDQL (Jakarta Data Query Language) query.
  * Created by {@link JdqlParser} from a {@code @Query} annotation value.
+ *
+ * @param selectFields projected field names from SELECT clause, null or empty = all fields
  */
 public record JdqlQuery(
+        List<String> selectFields,
+        List<AggregateFunction> aggregateFunctions,
         List<JdqlCondition> conditions,
         Combinator combinator,
         List<OrderSpec> orderBy
 ) {
 
     public enum Combinator { AND, OR }
+
+    public enum AggregateType { COUNT, SUM, AVG, MIN, MAX }
+
+    public record AggregateFunction(AggregateType type, String field) {}
 
     public enum Operator {
         EQ, NE, GT, GTE, LT, LTE,

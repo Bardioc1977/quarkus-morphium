@@ -1,6 +1,7 @@
 package de.caluga.morphium.quarkus.data;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
@@ -11,7 +12,7 @@ import java.util.regex.Pattern;
  * <p>
  * Supported JDQL subset (MongoDB-compatible):
  * <pre>
- * [WHERE condition [AND|OR condition ...]] [ORDER BY field [ASC|DESC] [, ...]]
+ * [SELECT field1, field2 [FROM EntityName]] [WHERE condition [AND|OR condition ...]] [ORDER BY field [ASC|DESC] [, ...]]
  * </pre>
  * Conditions:
  * <ul>
@@ -25,7 +26,7 @@ import java.util.regex.Pattern;
  *   <li>Boolean literals: {@code field = true} / {@code field = false}</li>
  *   <li>Numeric literals: {@code field > 100}</li>
  * </ul>
- * Not supported: JOINs, SELECT, GROUP BY, HAVING, subqueries.
+ * Not supported: JOINs, GROUP BY, HAVING, subqueries.
  */
 public final class JdqlParser {
 
@@ -34,6 +35,10 @@ public final class JdqlParser {
     // Split ORDER BY from WHERE (case-insensitive)
     private static final Pattern ORDER_BY_SPLIT = Pattern.compile(
             "^(.+?)\\s+ORDER\\s+BY\\s+(.+)$", Pattern.CASE_INSENSITIVE);
+
+    // Match aggregate function: COUNT(this), SUM(amount), AVG(field), MIN(field), MAX(field)
+    private static final Pattern AGGREGATE_PATTERN = Pattern.compile(
+            "(?i)(COUNT|SUM|AVG|MIN|MAX)\\s*\\(\\s*([a-zA-Z_][a-zA-Z0-9_.]*|this)\\s*\\)");
 
     // Match a named parameter :paramName
     private static final Pattern PARAM_REF = Pattern.compile(":([a-zA-Z_][a-zA-Z0-9_]*)");
@@ -44,16 +49,71 @@ public final class JdqlParser {
     /**
      * Parses a JDQL query string.
      *
-     * @param jdql the JDQL string (may or may not start with "WHERE")
+     * @param jdql the JDQL string (may or may not start with "SELECT" or "WHERE")
      * @return the parsed query descriptor
      * @throws IllegalArgumentException if the JDQL cannot be parsed
      */
     public static JdqlQuery parse(String jdql) {
         if (jdql == null || jdql.isBlank()) {
-            return new JdqlQuery(List.of(), JdqlQuery.Combinator.AND, List.of());
+            return new JdqlQuery(null, null, List.of(), JdqlQuery.Combinator.AND, List.of());
         }
 
         String trimmed = jdql.trim();
+        String upper = trimmed.toUpperCase(Locale.ROOT);
+
+        // --- Parse SELECT clause ---
+        List<String> selectFields = null;
+        List<JdqlQuery.AggregateFunction> aggregateFunctions = null;
+        if (upper.startsWith("SELECT ")) {
+            int selectEnd = findSelectEnd(upper);
+            String selectPart = trimmed.substring("SELECT ".length(), selectEnd).trim();
+            List<String> rawFields = Arrays.stream(selectPart.split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .toList();
+
+            // Classify each field: aggregate function or plain field
+            List<String> plainFields = new ArrayList<>();
+            List<JdqlQuery.AggregateFunction> aggFuncs = new ArrayList<>();
+            for (String field : rawFields) {
+                Matcher aggMatcher = AGGREGATE_PATTERN.matcher(field);
+                if (aggMatcher.matches()) {
+                    String funcName = aggMatcher.group(1).toUpperCase(Locale.ROOT);
+                    String argName = aggMatcher.group(2);
+                    JdqlQuery.AggregateType type = JdqlQuery.AggregateType.valueOf(funcName);
+                    aggFuncs.add(new JdqlQuery.AggregateFunction(type, argName));
+                } else {
+                    plainFields.add(field);
+                }
+            }
+
+            if (!aggFuncs.isEmpty() && !plainFields.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "Mixing aggregate functions and field projections requires GROUP BY (not supported in v1): " + selectPart);
+            }
+
+            if (!aggFuncs.isEmpty()) {
+                aggregateFunctions = aggFuncs;
+            } else {
+                selectFields = plainFields;
+            }
+
+            // Advance past SELECT fields
+            trimmed = trimmed.substring(selectEnd).trim();
+            upper = trimmed.toUpperCase(Locale.ROOT);
+
+            // Skip optional FROM clause
+            if (upper.startsWith("FROM ")) {
+                int fromEnd = findFromEnd(upper);
+                trimmed = trimmed.substring(fromEnd).trim();
+                upper = trimmed.toUpperCase(Locale.ROOT);
+            }
+        }
+
+        // --- From here, the remainder is [WHERE ...] [ORDER BY ...] ---
+        if (trimmed.isEmpty()) {
+            return new JdqlQuery(selectFields, aggregateFunctions, List.of(), JdqlQuery.Combinator.AND, List.of());
+        }
 
         // Split off ORDER BY
         List<JdqlQuery.OrderSpec> orderBy = new ArrayList<>();
@@ -73,7 +133,7 @@ public final class JdqlParser {
 
         // If empty after stripping WHERE, no conditions
         if (wherePart.isEmpty()) {
-            return new JdqlQuery(List.of(), JdqlQuery.Combinator.AND, orderBy);
+            return new JdqlQuery(selectFields, aggregateFunctions, List.of(), JdqlQuery.Combinator.AND, orderBy);
         }
 
         // Determine combinator and split conditions
@@ -93,7 +153,44 @@ public final class JdqlParser {
             conditions.add(parseCondition(condStr.trim()));
         }
 
-        return new JdqlQuery(conditions, combinator, orderBy);
+        return new JdqlQuery(selectFields, aggregateFunctions, conditions, combinator, orderBy);
+    }
+
+    // -- SELECT clause helpers --
+
+    /**
+     * Finds the end index of the SELECT field list.
+     * The SELECT clause ends at the first FROM, WHERE, or ORDER BY keyword.
+     */
+    private static int findSelectEnd(String upper) {
+        int fromIdx = indexOfKeyword(upper, " FROM ");
+        int whereIdx = indexOfKeyword(upper, " WHERE ");
+        int orderByIdx = indexOfKeyword(upper, " ORDER BY ");
+        int end = smallestPositive(fromIdx, whereIdx, orderByIdx);
+        return end > 0 ? end : upper.length();
+    }
+
+    /**
+     * Finds the end of the FROM clause (the entity name after FROM).
+     * FROM clause ends at WHERE, ORDER BY, or end of string.
+     */
+    private static int findFromEnd(String upper) {
+        int whereIdx = indexOfKeyword(upper, " WHERE ");
+        int orderByIdx = indexOfKeyword(upper, " ORDER BY ");
+        int end = smallestPositive(whereIdx, orderByIdx, -1);
+        return end > 0 ? end : upper.length();
+    }
+
+    private static int indexOfKeyword(String upper, String keyword) {
+        return upper.indexOf(keyword);
+    }
+
+    private static int smallestPositive(int a, int b, int c) {
+        int min = Integer.MAX_VALUE;
+        if (a > 0) min = Math.min(min, a);
+        if (b > 0) min = Math.min(min, b);
+        if (c > 0) min = Math.min(min, c);
+        return min == Integer.MAX_VALUE ? -1 : min;
     }
 
     // -- Condition parsing --

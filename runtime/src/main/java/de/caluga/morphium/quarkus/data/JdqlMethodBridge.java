@@ -1,11 +1,14 @@
 package de.caluga.morphium.quarkus.data;
 
 import de.caluga.morphium.Morphium;
+import de.caluga.morphium.aggregation.Aggregator;
+import de.caluga.morphium.aggregation.Group;
 import de.caluga.morphium.query.Query;
 import jakarta.data.Limit;
 import jakarta.data.Order;
 import jakarta.data.Sort;
 import jakarta.data.page.PageRequest;
+import jakarta.data.page.impl.CursoredPageRecord;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -34,9 +37,13 @@ public final class JdqlMethodBridge {
      * @param pageRequestParamIndex index of PageRequest parameter, -1 if absent
      * @param limitParamIndex    index of Limit parameter, -1 if absent
      * @param args               the method arguments
-     * @param returnsSingle      true if method returns a single entity
+     * @param returnsSingle      true if method returns a single entity T
      * @param returnsCount       true if method returns long (count)
      * @param returnsBoolean     true if method returns boolean (exists)
+     * @param returnsOptional    true if method returns Optional&lt;T&gt;
+     * @param returnsCursoredPage true if method returns CursoredPage&lt;T&gt;
+     * @param orderBySpec        encoded ordering from {@code @OrderBy}: "field1:ASC,field2:DESC"
+     * @param returnsStream      true if method returns Stream&lt;T&gt;
      * @return the query result
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -50,7 +57,11 @@ public final class JdqlMethodBridge {
                                      Object[] args,
                                      boolean returnsSingle,
                                      boolean returnsCount,
-                                     boolean returnsBoolean) {
+                                     boolean returnsBoolean,
+                                     boolean returnsOptional,
+                                     boolean returnsCursoredPage,
+                                     String orderBySpec,
+                                     boolean returnsStream) {
         Morphium morphium = repo.getMorphium();
         Class entityClass = repo.getMetadata().entityClass();
 
@@ -59,6 +70,11 @@ public final class JdqlMethodBridge {
 
         // Build param name → value map
         Map<String, Object> paramValues = buildParamMap(paramMapSpec, args);
+
+        // Aggregate functions → Aggregation Pipeline (early return)
+        if (query.aggregateFunctions() != null && !query.aggregateFunctions().isEmpty()) {
+            return executeAggregate(repo, query, paramValues, morphium, entityClass);
+        }
 
         // Build Morphium query
         Query mQuery = morphium.createQueryFor(entityClass);
@@ -106,9 +122,24 @@ public final class JdqlMethodBridge {
             mQuery.limit(limit.maxResults());
         }
 
-        // Apply PageRequest → return Page<T>
+        // Apply SELECT projection (skip for COUNT/EXISTS — they don't need it)
+        if (query.selectFields() != null && !query.selectFields().isEmpty()
+                && !returnsCount && !returnsBoolean) {
+            for (String field : query.selectFields()) {
+                String mongoField = resolveMongoField(morphium, entityClass, field);
+                mQuery.addProjection(mongoField);
+            }
+        }
+
+        // Apply PageRequest → return Page<T> or CursoredPage<T>
         if (pageRequestParamIndex >= 0 && args[pageRequestParamIndex] != null) {
             PageRequest pageRequest = (PageRequest) args[pageRequestParamIndex];
+
+            if (returnsCursoredPage) {
+                return executeCursoredJdql(mQuery, pageRequest, orderBySpec, query, paramValues,
+                        morphium, entityClass);
+            }
+
             int size = pageRequest.size();
             long page = pageRequest.page();
             int skip = (int) ((page - 1) * size);
@@ -131,10 +162,66 @@ public final class JdqlMethodBridge {
         if (returnsBoolean) {
             return mQuery.countAll() > 0;
         }
+        if (returnsOptional) {
+            return QueryResultHelper.optionalSingle(mQuery);
+        }
         if (returnsSingle) {
-            return mQuery.get();
+            return QueryResultHelper.requireSingle(mQuery);
+        }
+        if (returnsStream) {
+            return mQuery.stream();
         }
         return mQuery.asList();
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static Object executeCursoredJdql(Query mQuery, PageRequest pageRequest,
+                                               String orderBySpec, JdqlQuery jdqlQuery,
+                                               Map<String, Object> paramValues,
+                                               Morphium morphium, Class entityClass) {
+        List<CursorHelper.SortSpec> sortSpecs = CursorHelper.parseSortSpecs(orderBySpec);
+        boolean isForward = pageRequest.mode() != PageRequest.Mode.CURSOR_PREVIOUS;
+
+        if (pageRequest.mode() != PageRequest.Mode.OFFSET) {
+            PageRequest.Cursor cursor = pageRequest.cursor()
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "PageRequest mode is " + pageRequest.mode() + " but no cursor provided"));
+            CursorHelper.applyCursorCondition(mQuery, cursor, sortSpecs, morphium, entityClass, isForward);
+        }
+
+        CursorHelper.applySort(mQuery, sortSpecs, morphium, entityClass, isForward);
+        int requestedSize = pageRequest.size();
+        mQuery.limit(requestedSize + 1);
+
+        List content = mQuery.asList();
+        boolean hasMore = content.size() > requestedSize;
+        if (hasMore) {
+            content = new ArrayList(content.subList(0, requestedSize));
+        }
+        if (!isForward) {
+            Collections.reverse(content);
+        }
+
+        List<String> sortFields = sortSpecs.stream().map(CursorHelper.SortSpec::javaField).toList();
+        List<PageRequest.Cursor> cursors = CursorHelper.extractCursors(content, sortFields, morphium, entityClass);
+
+        long totalElements = -1;
+        if (pageRequest.requestTotal()) {
+            Query countQuery = morphium.createQueryFor(entityClass);
+            applyConditions(countQuery, jdqlQuery, paramValues, morphium, entityClass);
+            totalElements = countQuery.countAll();
+        }
+
+        boolean isFirstPage = pageRequest.mode() == PageRequest.Mode.OFFSET;
+        boolean isLastPage = !hasMore;
+
+        if (content.isEmpty()) {
+            return new CursoredPageRecord<>(content, cursors, totalElements, pageRequest,
+                    (PageRequest) null, (PageRequest) null);
+        }
+
+        return new CursoredPageRecord<>(content, cursors, totalElements, pageRequest,
+                isFirstPage, isLastPage);
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -244,6 +331,84 @@ public final class JdqlMethodBridge {
             map.put(name, args[idx]);
         }
         return map;
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static Object executeAggregate(AbstractMorphiumRepository<?, ?> repo,
+                                            JdqlQuery query,
+                                            Map<String, Object> paramValues,
+                                            Morphium morphium, Class entityClass) {
+        Aggregator agg = morphium.createAggregator(entityClass, Map.class);
+
+        // $match stage: WHERE conditions
+        if (!query.conditions().isEmpty()) {
+            Query matchQuery = morphium.createQueryFor(entityClass);
+            applyConditions(matchQuery, query, paramValues, morphium, entityClass);
+            agg.match(matchQuery);
+        }
+
+        // $group stage: _id=null (global aggregation)
+        Group group = agg.group((String) null);
+        for (int i = 0; i < query.aggregateFunctions().size(); i++) {
+            JdqlQuery.AggregateFunction func = query.aggregateFunctions().get(i);
+            String resultField = "agg_" + i;
+            String mongoField = "this".equals(func.field()) ? null
+                    : "$" + resolveMongoField(morphium, entityClass, func.field());
+
+            switch (func.type()) {
+                case COUNT -> group.sum(resultField, 1);
+                case SUM -> group.sum(resultField, mongoField);
+                case AVG -> group.avg(resultField, mongoField);
+                case MIN -> group.min(resultField, mongoField);
+                case MAX -> group.max(resultField, mongoField);
+            }
+        }
+        group.end();
+
+        List<Map<String, Object>> results = agg.aggregateMap();
+
+        // Empty result → default values
+        if (results.isEmpty()) {
+            if (query.aggregateFunctions().size() == 1) {
+                return defaultAggregateValue(query.aggregateFunctions().get(0).type());
+            }
+            Object[] arr = new Object[query.aggregateFunctions().size()];
+            for (int i = 0; i < arr.length; i++) {
+                arr[i] = defaultAggregateValue(query.aggregateFunctions().get(i).type());
+            }
+            return arr;
+        }
+
+        Map<String, Object> result = results.get(0);
+
+        if (query.aggregateFunctions().size() == 1) {
+            return toNumber(result.get("agg_0"), query.aggregateFunctions().get(0).type());
+        }
+
+        // Multiple aggregates → Object[]
+        Object[] arr = new Object[query.aggregateFunctions().size()];
+        for (int i = 0; i < arr.length; i++) {
+            arr[i] = toNumber(result.get("agg_" + i), query.aggregateFunctions().get(i).type());
+        }
+        return arr;
+    }
+
+    private static Object defaultAggregateValue(JdqlQuery.AggregateType type) {
+        return switch (type) {
+            case COUNT -> 0L;
+            case SUM, AVG, MIN, MAX -> 0.0;
+        };
+    }
+
+    private static Object toNumber(Object value, JdqlQuery.AggregateType type) {
+        if (value == null) return defaultAggregateValue(type);
+        if (type == JdqlQuery.AggregateType.COUNT) {
+            return ((Number) value).longValue();
+        }
+        if (value instanceof Number n) {
+            return (n instanceof Integer || n instanceof Long) ? n.longValue() : n.doubleValue();
+        }
+        return value;
     }
 
     @SuppressWarnings("unchecked")
