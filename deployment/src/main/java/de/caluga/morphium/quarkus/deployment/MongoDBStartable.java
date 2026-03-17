@@ -15,7 +15,6 @@
  */
 package de.caluga.morphium.quarkus.deployment;
 
-import io.quarkus.deployment.builditem.Startable;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.mongodb.MongoDBContainer;
@@ -26,12 +25,10 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * {@link Startable} wrapper around a Testcontainers MongoDB container.
- * Used by Quarkus's {@code owned()} Dev Services API so that the framework
- * manages the container lifecycle and reuses it across augmentation phases
- * via the cross-classloader {@code RunningDevServicesRegistry}.
+ * Wrapper around a Testcontainers MongoDB container, managed by
+ * {@link MorphiumDevServicesProcessor} via static volatile fields.
  */
-class MongoDBStartable implements Startable {
+class MongoDBStartable {
 
     private static final int MONGO_PORT = 27017;
 
@@ -44,16 +41,11 @@ class MongoDBStartable implements Startable {
         this.replicaSet = replicaSet;
     }
 
-    @Override
     @SuppressWarnings("resource")
-    public void start() {
+    void start() {
         if (container != null) {
-            return; // Already started
+            return;
         }
-        // Apply the image name substitutor ourselves (e.g. hub.image.name.prefix from
-        // testcontainers.properties) and mark the result as a compatible substitute.
-        // This prevents Testcontainers from applying the substitutor a second time,
-        // and ensures the image name matches what Docker has cached locally.
         DockerImageName base = DockerImageName.parse(imageName);
         DockerImageName substituted = ImageNameSubstitutor.instance().apply(base)
                 .asCompatibleSubstituteFor("mongo");
@@ -68,17 +60,10 @@ class MongoDBStartable implements Startable {
         container.start();
     }
 
-    @Override
-    public void close() {
+    void close() {
         if (container != null && container.isRunning()) {
             container.stop();
         }
-    }
-
-    @Override
-    public String getConnectionInfo() {
-        ensureStarted();
-        return getHost() + ":" + getMappedPort();
     }
 
     String getHost() {
@@ -86,20 +71,13 @@ class MongoDBStartable implements Startable {
         return container.getHost();
     }
 
-    @Override
-    public String getContainerId() {
+    String getContainerId() {
         return container != null ? container.getContainerId() : null;
     }
 
     int getMappedPort() {
         ensureStarted();
         return container.getMappedPort(MONGO_PORT);
-    }
-
-    private void ensureStarted() {
-        if (container == null) {
-            throw new IllegalStateException("MongoDBStartable has not been started yet");
-        }
     }
 
     boolean isReplicaSet() {
@@ -114,5 +92,11 @@ class MongoDBStartable implements Startable {
             return m.find() ? m.group(1) : "docker-rs";
         }
         return null;
+    }
+
+    private void ensureStarted() {
+        if (container == null) {
+            throw new IllegalStateException("MongoDBStartable has not been started yet");
+        }
     }
 }
