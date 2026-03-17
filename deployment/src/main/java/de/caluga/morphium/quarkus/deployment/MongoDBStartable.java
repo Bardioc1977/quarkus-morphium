@@ -22,6 +22,9 @@ import org.testcontainers.mongodb.MongoDBContainer;
 import org.testcontainers.utility.DockerImageName;
 import org.testcontainers.utility.ImageNameSubstitutor;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 /**
  * {@link Startable} wrapper around a Testcontainers MongoDB container.
  * Used by Quarkus's {@code owned()} Dev Services API so that the framework
@@ -106,8 +109,7 @@ class MongoDBStartable implements Startable {
     String getReplicaSetName() {
         if (container instanceof MongoDBContainer mongoContainer) {
             String connStr = mongoContainer.getConnectionString();
-            java.util.regex.Matcher m = java.util.regex.Pattern
-                    .compile("[?&]replicaSet=([^&]+)")
+            Matcher m = Pattern.compile("[?&]replicaSet=([^&]+)")
                     .matcher(connStr);
             return m.find() ? m.group(1) : "docker-rs";
         }

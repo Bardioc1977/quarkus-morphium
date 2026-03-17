@@ -1,5 +1,6 @@
 package de.caluga.morphium.quarkus.data;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -68,7 +69,7 @@ public final class QueryMethodBridge {
 
             // Merge method-name-derived OrderBy with @OrderBy annotation specs
             if (!orderBySpec.isEmpty()) {
-                var mergedOrderBy = new java.util.ArrayList<>(parsed.orderBy());
+                var mergedOrderBy = new ArrayList<>(parsed.orderBy());
                 mergedOrderBy.addAll(parseOrderBySpec(orderBySpec));
                 return new QueryDescriptor(
                         parsed.prefix(),
@@ -144,7 +145,7 @@ public final class QueryMethodBridge {
      * into a list of {@link QueryDescriptor.OrderSpec}.
      */
     private static List<QueryDescriptor.OrderSpec> parseOrderBySpec(String spec) {
-        var result = new java.util.ArrayList<QueryDescriptor.OrderSpec>();
+        var result = new ArrayList<QueryDescriptor.OrderSpec>();
         for (String part : spec.split(",")) {
             String trimmed = part.trim();
             if (trimmed.isEmpty()) continue;
