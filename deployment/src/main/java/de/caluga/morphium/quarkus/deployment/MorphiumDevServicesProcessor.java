@@ -40,6 +40,7 @@ import java.util.function.Function;
  * <ul>
  *   <li>{@code quarkus.morphium.devservices.enabled=false}</li>
  *   <li>{@code quarkus.morphium.hosts} is explicitly set in {@code application.properties}</li>
+ *   <li>{@code quarkus.morphium.replica-set-name} is explicitly set in {@code application.properties}</li>
  *   <li>The application runs in normal (production) mode</li>
  * </ul>
  */

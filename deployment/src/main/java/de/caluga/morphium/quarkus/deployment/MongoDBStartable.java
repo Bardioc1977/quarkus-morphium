@@ -71,10 +71,12 @@ class MongoDBStartable implements Startable {
 
     @Override
     public String getConnectionInfo() {
+        ensureStarted();
         return getHost() + ":" + getMappedPort();
     }
 
     String getHost() {
+        ensureStarted();
         return container.getHost();
     }
 
@@ -84,7 +86,14 @@ class MongoDBStartable implements Startable {
     }
 
     int getMappedPort() {
+        ensureStarted();
         return container.getMappedPort(MONGO_PORT);
+    }
+
+    private void ensureStarted() {
+        if (container == null) {
+            throw new IllegalStateException("MongoDBStartable has not been started yet");
+        }
     }
 
     boolean isReplicaSet() {
