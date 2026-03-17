@@ -24,7 +24,6 @@ import org.jboss.logging.Logger;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * Quarkus build-time processor that automatically starts a MongoDB container
@@ -140,13 +139,5 @@ public class MorphiumDevServicesProcessor {
     }
 
     record CapturedConfig(String imageName, boolean replicaSet, String databaseName) {
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (!(o instanceof CapturedConfig that)) return false;
-            return replicaSet == that.replicaSet
-                    && Objects.equals(imageName, that.imageName)
-                    && Objects.equals(databaseName, that.databaseName);
-        }
     }
 }
