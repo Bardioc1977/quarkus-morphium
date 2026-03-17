@@ -139,10 +139,11 @@ public class MorphiumProcessor {
         // Pass discovered @Entity classes to runtime so MorphiumProducer can
         // call ensureIndicesFor() — Morphium's built-in ClassGraph scan does
         // not work with Quarkus's classloader.
+        // Always call setEntityClassNames (even when empty) to reset state on hot reload.
         if (!entityClassNames.isEmpty()) {
             log.infof("Morphium: passing %d @Entity classes for runtime index creation", entityClassNames.size());
-            recorder.setEntityClassNames(entityClassNames);
         }
+        recorder.setEntityClassNames(entityClassNames);
     }
 
     private void registerClass(String className,

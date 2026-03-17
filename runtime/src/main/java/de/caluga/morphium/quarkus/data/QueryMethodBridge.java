@@ -150,7 +150,17 @@ public final class QueryMethodBridge {
             if (trimmed.isEmpty()) continue;
             String[] fieldAndDir = trimmed.split(":");
             String field = fieldAndDir[0].trim();
-            if (field.isEmpty()) continue;
+            if (field.isEmpty()) {
+                throw new IllegalArgumentException("Empty field name in @OrderBy spec: '" + spec + "'");
+            }
+            if (fieldAndDir.length > 1) {
+                String dirStr = fieldAndDir[1].trim();
+                if (!"ASC".equals(dirStr) && !"DESC".equals(dirStr)) {
+                    throw new IllegalArgumentException(
+                            "Invalid direction '" + dirStr + "' in @OrderBy spec: '" + spec
+                                    + "' — expected ASC or DESC");
+                }
+            }
             QueryDescriptor.Direction dir = fieldAndDir.length > 1 && "DESC".equals(fieldAndDir[1].trim())
                     ? QueryDescriptor.Direction.DESC : QueryDescriptor.Direction.ASC;
             result.add(new QueryDescriptor.OrderSpec(field, dir));
