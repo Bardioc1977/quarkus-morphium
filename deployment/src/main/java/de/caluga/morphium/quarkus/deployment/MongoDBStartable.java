@@ -50,7 +50,7 @@ class MongoDBStartable implements Startable {
         // and ensures the image name matches what Docker has cached locally.
         DockerImageName base = DockerImageName.parse(imageName);
         DockerImageName substituted = ImageNameSubstitutor.instance().apply(base)
-                .asCompatibleSubstituteFor(base.getUnversionedPart());
+                .asCompatibleSubstituteFor("mongo");
 
         if (replicaSet) {
             container = new MongoDBContainer(substituted).withReplicaSet();

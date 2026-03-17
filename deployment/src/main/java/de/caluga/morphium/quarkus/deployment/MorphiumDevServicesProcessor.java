@@ -57,8 +57,10 @@ public class MorphiumDevServicesProcessor {
 
         Optional<String> explicitHosts =
                 ConfigProvider.getConfig().getOptionalValue("quarkus.morphium.hosts", String.class);
-        if (explicitHosts.isPresent()) {
-            log.debugf("quarkus.morphium.hosts=%s – skipping Dev Services", explicitHosts.get());
+        Optional<String> explicitReplicaSetName =
+                ConfigProvider.getConfig().getOptionalValue("quarkus.morphium.replica-set-name", String.class);
+        if (explicitHosts.isPresent() || explicitReplicaSetName.isPresent()) {
+            log.debug("Morphium connection settings already configured – skipping Dev Services");
             return null;
         }
 
