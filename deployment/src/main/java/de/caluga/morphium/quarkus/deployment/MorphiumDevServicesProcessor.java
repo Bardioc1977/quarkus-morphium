@@ -71,7 +71,7 @@ public class MorphiumDevServicesProcessor {
         // Object.equals() for objects without @ConfigMapping/@ConfigGroup interfaces.
         // Record.equals() uses instanceof, which fails across classloaders.
         // String.equals() compares char arrays and works reliably cross-classloader.
-        String serviceConfig = config.imageName() + "|" + config.databaseName() + "|" + config.replicaSet();
+        String serviceConfig = config.imageName() + "|" + config.replicaSet();
 
         Map<String, Function<MongoDBStartable, String>> configProvider = new HashMap<>();
         configProvider.put("quarkus.morphium.hosts", s -> s.getHost() + ":" + s.getMappedPort());

@@ -148,8 +148,13 @@ public final class QueryMethodBridge {
         var result = new ArrayList<QueryDescriptor.OrderSpec>();
         for (String part : spec.split(",")) {
             String trimmed = part.trim();
-            if (trimmed.isEmpty()) continue;
-            String[] fieldAndDir = trimmed.split(":");
+            if (trimmed.isEmpty()) {
+                throw new IllegalArgumentException("Empty fragment in @OrderBy spec: '" + spec + "'");
+            }
+            String[] fieldAndDir = trimmed.split(":", -1);
+            if (fieldAndDir.length > 2) {
+                throw new IllegalArgumentException("Invalid @OrderBy fragment: '" + trimmed + "'");
+            }
             String field = fieldAndDir[0].trim();
             if (field.isEmpty()) {
                 throw new IllegalArgumentException("Empty field name in @OrderBy spec: '" + spec + "'");
