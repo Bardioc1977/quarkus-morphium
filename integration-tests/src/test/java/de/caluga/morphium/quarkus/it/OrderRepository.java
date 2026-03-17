@@ -230,6 +230,14 @@ public interface OrderRepository extends BasicRepository<OrderEntity, String> {
     @Query("SELECT COUNT(this) WHERE status = 'OPEN'")
     long countOpenLiteral();
 
+    // --- Implicit @Param via -parameters compiler option (Jakarta Data §4.6.1) ---
+
+    @Query("WHERE status = :status ORDER BY amount ASC")
+    List<OrderEntity> queryByStatusImplicitParam(String status);
+
+    @Query("WHERE status = :status AND amount > :minAmount")
+    List<OrderEntity> queryByStatusAndMinAmountImplicit(String status, double minAmount);
+
     // --- #8v2 JDQL GROUP BY ---
 
     @Query("SELECT status, COUNT(this) GROUP BY status")

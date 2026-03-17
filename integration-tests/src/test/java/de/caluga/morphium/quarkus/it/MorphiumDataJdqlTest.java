@@ -115,6 +115,28 @@ class MorphiumDataJdqlTest {
                 assertThat(o.getStatus()).isIn("OPEN", "PENDING"));
     }
 
+    @Test
+    @Order(8)
+    @DisplayName("@Query with implicit @Param via -parameters compiler option (single param)")
+    void queryByStatusImplicitParam() {
+        List<OrderEntity> open = repository.queryByStatusImplicitParam("OPEN");
+
+        assertThat(open).hasSize(2);
+        assertThat(open).allSatisfy(o -> assertThat(o.getStatus()).isEqualTo("OPEN"));
+        assertThat(open.get(0).getAmount()).isEqualTo(100.0);
+        assertThat(open.get(1).getAmount()).isEqualTo(250.0);
+    }
+
+    @Test
+    @Order(9)
+    @DisplayName("@Query with implicit @Param via -parameters compiler option (multiple params)")
+    void queryByStatusAndMinAmountImplicit() {
+        List<OrderEntity> result = repository.queryByStatusAndMinAmountImplicit("OPEN", 150.0);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getAmount()).isEqualTo(250.0);
+    }
+
     private void createOrder(String customerId, double amount, String status) {
         var order = new OrderEntity();
         order.setCustomerId(customerId);
