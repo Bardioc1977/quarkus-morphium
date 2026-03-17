@@ -71,7 +71,11 @@ class MongoDBStartable implements Startable {
 
     @Override
     public String getConnectionInfo() {
-        return "localhost:" + getMappedPort();
+        return getHost() + ":" + getMappedPort();
+    }
+
+    String getHost() {
+        return container.getHost();
     }
 
     @Override

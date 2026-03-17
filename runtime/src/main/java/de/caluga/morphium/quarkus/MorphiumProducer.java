@@ -212,8 +212,10 @@ public class MorphiumProducer {
 
         // Morphium's built-in index creation uses ClassGraph which does not work
         // with Quarkus's classloader. Use the entity classes discovered at build time
-        // and explicitly ensure their indexes.
-        ensureIndices(m);
+        // and explicitly ensure their indexes — but only when configured to do so.
+        if (config.indexCheck() == MorphiumRuntimeConfig.IndexCheckMode.CREATE_ON_STARTUP) {
+            ensureIndices(m);
+        }
 
         return m;
     }
@@ -227,7 +229,7 @@ public class MorphiumProducer {
             } catch (ClassNotFoundException e) {
                 log.warn("Could not load entity class for index creation: {}", className);
             } catch (Exception e) {
-                log.warn("Failed to ensure indexes for {}: {}", className, e.getMessage());
+                log.warn("Failed to ensure indexes for {}: {}", className, e.getMessage(), e);
             }
         }
     }

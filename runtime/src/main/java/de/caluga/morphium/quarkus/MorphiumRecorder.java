@@ -34,7 +34,7 @@ public class MorphiumRecorder {
     private static volatile List<String> entityClassNames = Collections.emptyList();
 
     public void setEntityClassNames(List<String> classNames) {
-        entityClassNames = classNames;
+        entityClassNames = classNames == null ? Collections.emptyList() : List.copyOf(classNames);
     }
 
     static List<String> getEntityClassNames() {

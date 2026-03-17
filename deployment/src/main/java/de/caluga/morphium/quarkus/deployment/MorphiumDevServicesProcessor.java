@@ -71,7 +71,7 @@ public class MorphiumDevServicesProcessor {
         String serviceConfig = config.imageName() + "|" + config.databaseName() + "|" + config.replicaSet();
 
         Map<String, Function<MongoDBStartable, String>> configProvider = new HashMap<>();
-        configProvider.put("quarkus.morphium.hosts", s -> "localhost:" + s.getMappedPort());
+        configProvider.put("quarkus.morphium.hosts", s -> s.getHost() + ":" + s.getMappedPort());
         configProvider.put("quarkus.morphium.database", s -> config.databaseName());
 
         if (config.replicaSet()) {

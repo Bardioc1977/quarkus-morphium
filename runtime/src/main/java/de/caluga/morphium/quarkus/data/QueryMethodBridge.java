@@ -66,14 +66,15 @@ public final class QueryMethodBridge {
         QueryDescriptor descriptor = CACHE.computeIfAbsent(cacheKey, k -> {
             QueryDescriptor parsed = MethodNameParser.parse(methodName, null);
 
-            // Merge @OrderBy annotation specs if the method name has no OrderBy clause
-            if (parsed.orderBy().isEmpty() && !orderBySpec.isEmpty()) {
-                List<QueryDescriptor.OrderSpec> annotationSpecs = parseOrderBySpec(orderBySpec);
+            // Merge method-name-derived OrderBy with @OrderBy annotation specs
+            if (!orderBySpec.isEmpty()) {
+                var mergedOrderBy = new java.util.ArrayList<>(parsed.orderBy());
+                mergedOrderBy.addAll(parseOrderBySpec(orderBySpec));
                 return new QueryDescriptor(
                         parsed.prefix(),
                         parsed.conditions(),
                         parsed.combinator(),
-                        annotationSpecs,
+                        mergedOrderBy,
                         parsed.returnType());
             }
             return parsed;
@@ -145,9 +146,12 @@ public final class QueryMethodBridge {
     private static List<QueryDescriptor.OrderSpec> parseOrderBySpec(String spec) {
         var result = new java.util.ArrayList<QueryDescriptor.OrderSpec>();
         for (String part : spec.split(",")) {
-            String[] fieldAndDir = part.split(":");
-            String field = fieldAndDir[0];
-            QueryDescriptor.Direction dir = fieldAndDir.length > 1 && "DESC".equals(fieldAndDir[1])
+            String trimmed = part.trim();
+            if (trimmed.isEmpty()) continue;
+            String[] fieldAndDir = trimmed.split(":");
+            String field = fieldAndDir[0].trim();
+            if (field.isEmpty()) continue;
+            QueryDescriptor.Direction dir = fieldAndDir.length > 1 && "DESC".equals(fieldAndDir[1].trim())
                     ? QueryDescriptor.Direction.DESC : QueryDescriptor.Direction.ASC;
             result.add(new QueryDescriptor.OrderSpec(field, dir));
         }
