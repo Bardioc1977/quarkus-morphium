@@ -54,16 +54,21 @@ class MorphiumDataCoverageTest {
 
     @Test
     @Order(2)
-    @DisplayName("findByStatusNot excludes orders with given status")
+    @DisplayName("findByStatusNot excludes orders with given status and sorts by @OrderBy(amount DESC)")
     void findByStatusNot() {
         morphium.store(order("C1", 100, "OPEN"));
-        morphium.store(order("C2", 200, "OPEN"));
-        morphium.store(order("C3", 50, "CLOSED"));
+        morphium.store(order("C2", 50, "CLOSED"));
+        morphium.store(order("C3", 200, "CLOSED"));
+        morphium.store(order("C4", 150, "PENDING"));
 
         List<OrderEntity> result = repository.findByStatusNot("OPEN");
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getStatus()).isEqualTo("CLOSED");
+        assertThat(result).hasSize(3);
+        assertThat(result).extracting(OrderEntity::getStatus)
+                .allMatch(s -> !"OPEN".equals(s));
+        // Verify @OrderBy(value = "amount", descending = true) on query derivation method
+        assertThat(result).extracting(OrderEntity::getAmount)
+                .containsExactly(200.0, 150.0, 50.0);
     }
 
     @Test

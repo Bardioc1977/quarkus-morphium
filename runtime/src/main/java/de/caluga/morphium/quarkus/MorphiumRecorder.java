@@ -17,16 +17,27 @@ package de.caluga.morphium.quarkus;
 
 import io.quarkus.runtime.annotations.Recorder;
 
+import java.util.Collections;
+import java.util.List;
+
 /**
  * Quarkus {@link Recorder} for the Morphium extension.
  *
- * <p>Currently a placeholder – the {@link MorphiumProducer} handles all
- * lifecycle work at CDI startup/shutdown, so no build-time bytecode
- * recording is necessary.  The class is kept as an extension point for
- * future features (e.g. pre-warming the entity cache at native image build
- * time).
+ * <p>Stores the list of {@code @Entity} class names discovered at build time
+ * so that {@link MorphiumProducer} can call {@code ensureIndicesFor()} at
+ * runtime. This is necessary because Morphium's built-in ClassGraph scan
+ * does not work with Quarkus's classloader.
  */
 @Recorder
 public class MorphiumRecorder {
-    // reserved for future build-time initialisation steps
+
+    private static volatile List<String> entityClassNames = Collections.emptyList();
+
+    public void setEntityClassNames(List<String> classNames) {
+        entityClassNames = classNames;
+    }
+
+    static List<String> getEntityClassNames() {
+        return entityClassNames;
+    }
 }

@@ -210,6 +210,25 @@ public class MorphiumProducer {
         m.getMapper().registerCustomMapperFor(LocalDateTime.class,
                 new LocalDateTimeMapper(config.localDateTime().useBsonDate()));
 
+        // Morphium's built-in index creation uses ClassGraph which does not work
+        // with Quarkus's classloader. Use the entity classes discovered at build time
+        // and explicitly ensure their indexes.
+        ensureIndices(m);
+
         return m;
+    }
+
+    private void ensureIndices(Morphium m) {
+        for (String className : MorphiumRecorder.getEntityClassNames()) {
+            try {
+                Class<?> entityClass = Thread.currentThread().getContextClassLoader().loadClass(className);
+                m.ensureIndicesFor(entityClass);
+                log.debug("Ensured indexes for {}", className);
+            } catch (ClassNotFoundException e) {
+                log.warn("Could not load entity class for index creation: {}", className);
+            } catch (Exception e) {
+                log.warn("Failed to ensure indexes for {}: {}", className, e.getMessage());
+            }
+        }
     }
 }

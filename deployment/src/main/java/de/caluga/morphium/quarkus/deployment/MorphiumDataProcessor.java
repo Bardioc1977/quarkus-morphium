@@ -36,8 +36,7 @@ import org.jboss.jandex.ParameterizedType;
 import org.jboss.jandex.PrimitiveType;
 import org.jboss.jandex.Type;
 import org.jboss.jandex.TypeVariable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.jboss.logging.Logger;
 
 import java.lang.reflect.Modifier;
 import java.util.*;
@@ -53,7 +52,7 @@ import java.util.stream.Stream;
  */
 public class MorphiumDataProcessor {
 
-    private static final Logger log = LoggerFactory.getLogger(MorphiumDataProcessor.class);
+    private static final Logger log = Logger.getLogger(MorphiumDataProcessor.class);
 
     private static final DotName REPOSITORY_ANNOTATION = DotName.createSimple(
             "jakarta.data.repository.Repository");
@@ -146,14 +145,14 @@ public class MorphiumDataProcessor {
 
             ClassInfo repoClass = ann.target().asClass();
             if (!repoClass.isInterface()) {
-                log.warn("@Repository on non-interface {} — skipping", repoClass.name());
+                log.warnf("@Repository on non-interface %s — skipping", repoClass.name());
                 continue;
             }
 
             // Find the DataRepository/BasicRepository/CrudRepository superinterface and extract T, K
             TypeParameters tp = resolveEntityAndIdTypes(repoClass, index);
             if (tp == null) {
-                log.warn("@Repository {} does not extend DataRepository/BasicRepository/CrudRepository — skipping",
+                log.warnf("@Repository %s does not extend DataRepository/BasicRepository/CrudRepository — skipping",
                         repoClass.name());
                 continue;
             }
@@ -173,7 +172,7 @@ public class MorphiumDataProcessor {
                         + " has no @Id field.");
             }
 
-            log.info("Discovered @Repository {} → entity={}, id={}, idField={}",
+            log.infof("Discovered @Repository %s → entity=%s, id=%s, idField=%s",
                     repoClass.name(), tp.entityType, tp.idType, idFieldName);
 
             repositoryProducer.produce(new RepositoryBuildItem(
@@ -301,7 +300,7 @@ public class MorphiumDataProcessor {
                 clinit.returnVoid();
             }
 
-            log.info("Generated @StaticMetamodel: {}", metamodelClassName);
+            log.infof("Generated @StaticMetamodel: %s", metamodelClassName);
         }
 
         reflectiveClasses.produce(ReflectiveClassBuildItem.builder(metamodelClassName)
@@ -463,7 +462,7 @@ public class MorphiumDataProcessor {
                 generateCustomQueryMethods(cc, repoInterface, index, entityClassName, entityFields, reflectiveClasses);
             }
 
-            log.info("Generated repository implementation: {}", implClassName);
+            log.infof("Generated repository implementation: %s", implClassName);
         }
 
         // Register for reflection (native image)
@@ -578,7 +577,7 @@ public class MorphiumDataProcessor {
             orderByFields.add(fieldAndDir[0]);
         }
         if (!orderByFields.contains("id")) {
-            log.warn("CursoredPage method {}.{} has @OrderBy {} but does not include the @Id field 'id'. "
+            log.warnf("CursoredPage method %s.%s has @OrderBy %s but does not include the @Id field 'id'. "
                             + "Without a unique tie-breaker, cursor-based pagination may produce duplicate or missing results. "
                             + "Consider adding @OrderBy(\"id\") as last sort criterion.",
                     method.declaringClass().name(), method.name(), orderByFields);
@@ -803,6 +802,9 @@ public class MorphiumDataProcessor {
                                      Set<String> entityFields) {
         String methodName = method.name();
 
+        // Build orderBy spec from @OrderBy annotations
+        String orderBySpec = buildOrderBySpec(method);
+
         // Detect async: CompletionStage<X> → unwrap X as effective return type
         Type returnType = method.returnType();
         boolean isAsync = isCompletionStage(returnType);
@@ -863,6 +865,7 @@ public class MorphiumDataProcessor {
             ResultHandle returnsOptionalHandle = mc.load(returnsOptional);
             ResultHandle returnsBooleanHandle = mc.load(returnsBoolean);
             ResultHandle returnsStreamHandle = mc.load(returnsStream);
+            ResultHandle orderBySpecHandle = mc.load(orderBySpec);
             ResultHandle thisHandle = mc.getThis();
 
             String bridgeMethod = isAsync ? "executeQueryAsync" : "executeQuery";
@@ -881,9 +884,11 @@ public class MorphiumDataProcessor {
                                 boolean.class,
                                 boolean.class,
                                 boolean.class,
-                                boolean.class),
+                                boolean.class,
+                                String.class),
                         thisHandle, methodNameHandle, argsArray, returnsSingleHandle,
-                        returnsOptionalHandle, returnsBooleanHandle, returnsStreamHandle);
+                        returnsOptionalHandle, returnsBooleanHandle, returnsStreamHandle,
+                        orderBySpecHandle);
                 mc.returnVoid();
             } else {
                 ResultHandle result = mc.invokeStaticMethod(
@@ -897,9 +902,11 @@ public class MorphiumDataProcessor {
                                 boolean.class,
                                 boolean.class,
                                 boolean.class,
-                                boolean.class),
+                                boolean.class,
+                                String.class),
                         thisHandle, methodNameHandle, argsArray, returnsSingleHandle,
-                        returnsOptionalHandle, returnsBooleanHandle, returnsStreamHandle);
+                        returnsOptionalHandle, returnsBooleanHandle, returnsStreamHandle,
+                        orderBySpecHandle);
 
                 // Unbox/cast the result to the declared return type (skip for async — returns CompletionStage)
                 if (!isAsync && returnType.kind() == Type.Kind.PRIMITIVE) {
@@ -1017,7 +1024,7 @@ public class MorphiumDataProcessor {
                 if (entityFields != null && !entityFields.isEmpty() && !"id(this)".equals(fieldName)) {
                     String rootField = fieldName.contains(".") ? fieldName.substring(0, fieldName.indexOf('.')) : fieldName;
                     if (!entityFields.contains(rootField)) {
-                        log.warn("@By(\"{}\") on method {}.{} param {} — field '{}' not found on entity {}. " +
+                        log.warnf("@By(\"%s\") on method %s.%s param %s — field '%s' not found on entity %s. " +
                                         "Will use as-is (may be resolved at runtime via @Property).",
                                 fieldName, method.declaringClass().name(), method.name(), i, rootField, entityClassName);
                     }
@@ -1104,7 +1111,7 @@ public class MorphiumDataProcessor {
             mc.returnValue(result);
         }
 
-        log.info("Generated @Find method: {}.{}{}", method.declaringClass().name(), method.name(),
+        log.infof("Generated @Find method: %s.%s%s", method.declaringClass().name(), method.name(),
                 isAsync ? " (async)" : "");
     }
 
@@ -1177,7 +1184,7 @@ public class MorphiumDataProcessor {
             }
         }
 
-        log.info("Generated @Delete method: {}.{}", method.declaringClass().name(), method.name());
+        log.infof("Generated @Delete method: %s.%s", method.declaringClass().name(), method.name());
     }
 
     /**
@@ -1212,7 +1219,7 @@ public class MorphiumDataProcessor {
             }
         }
 
-        log.info("Generated @Insert method: {}.{}", method.declaringClass().name(), method.name());
+        log.infof("Generated @Insert method: %s.%s", method.declaringClass().name(), method.name());
     }
 
     /**
@@ -1247,7 +1254,7 @@ public class MorphiumDataProcessor {
             }
         }
 
-        log.info("Generated @Save method: {}.{}", method.declaringClass().name(), method.name());
+        log.infof("Generated @Save method: %s.%s", method.declaringClass().name(), method.name());
     }
 
     /**
@@ -1282,7 +1289,7 @@ public class MorphiumDataProcessor {
             }
         }
 
-        log.info("Generated @Update method: {}.{}", method.declaringClass().name(), method.name());
+        log.infof("Generated @Update method: %s.%s", method.declaringClass().name(), method.name());
     }
 
     /**
@@ -1499,7 +1506,7 @@ public class MorphiumDataProcessor {
             mc.returnValue(result);
         }
 
-        log.info("Generated @Query method: {}.{}{} → JDQL: {}", method.declaringClass().name(), method.name(),
+        log.infof("Generated @Query method: %s.%s%s → JDQL: %s", method.declaringClass().name(), method.name(),
                 isAsync ? " (async)" : "", jdql);
     }
 

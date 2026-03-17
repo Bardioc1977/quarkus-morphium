@@ -17,20 +17,25 @@ package de.caluga.morphium.quarkus.deployment;
 
 import de.caluga.morphium.annotations.Embedded;
 import de.caluga.morphium.annotations.Entity;
+import de.caluga.morphium.quarkus.MorphiumRecorder;
 import io.github.classgraph.ClassGraph;
 import io.github.classgraph.ClassInfo;
 import io.github.classgraph.ScanResult;
 import io.quarkus.arc.deployment.AdditionalBeanBuildItem;
 import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
+import io.quarkus.deployment.annotations.ExecutionTime;
+import io.quarkus.deployment.annotations.Record;
 import io.quarkus.deployment.builditem.FeatureBuildItem;
 import io.quarkus.deployment.builditem.nativeimage.ReflectiveClassBuildItem;
 import io.quarkus.smallrye.health.deployment.spi.HealthBuildItem;
 import de.caluga.morphium.quarkus.MorphiumBlockingCallDetector;
 import de.caluga.morphium.quarkus.MorphiumProducer;
 import de.caluga.morphium.quarkus.transaction.MorphiumTransactionalInterceptor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.jboss.logging.Logger;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Quarkus build-time processor for the Morphium extension.
@@ -49,7 +54,7 @@ import org.slf4j.LoggerFactory;
  */
 public class MorphiumProcessor {
 
-    private static final Logger log = LoggerFactory.getLogger(MorphiumProcessor.class);
+    private static final Logger log = Logger.getLogger(MorphiumProcessor.class);
 
     // ------------------------------------------------------------------
     // Feature registration
@@ -109,7 +114,11 @@ public class MorphiumProcessor {
     // ------------------------------------------------------------------
 
     @BuildStep
-    void registerEntitiesForReflection(BuildProducer<ReflectiveClassBuildItem> reflectiveClasses) {
+    @Record(ExecutionTime.RUNTIME_INIT)
+    void registerEntitiesForReflection(BuildProducer<ReflectiveClassBuildItem> reflectiveClasses,
+                                       MorphiumRecorder recorder) {
+        List<String> entityClassNames = new ArrayList<>();
+
         try (ScanResult scan = new ClassGraph()
                 .enableClassInfo()
                 .enableAnnotationInfo()
@@ -117,6 +126,7 @@ public class MorphiumProcessor {
 
             for (ClassInfo ci : scan.getClassesWithAnnotation(Entity.class.getName())) {
                 registerClass(ci.getName(), reflectiveClasses);
+                entityClassNames.add(ci.getName());
             }
             for (ClassInfo ci : scan.getClassesWithAnnotation(Embedded.class.getName())) {
                 registerClass(ci.getName(), reflectiveClasses);
@@ -125,11 +135,19 @@ public class MorphiumProcessor {
             log.warn("Morphium: classpath scan for @Entity / @Embedded failed – "
                 + "native image may require manual reflect-config.json entries", e);
         }
+
+        // Pass discovered @Entity classes to runtime so MorphiumProducer can
+        // call ensureIndicesFor() — Morphium's built-in ClassGraph scan does
+        // not work with Quarkus's classloader.
+        if (!entityClassNames.isEmpty()) {
+            log.infof("Morphium: passing %d @Entity classes for runtime index creation", entityClassNames.size());
+            recorder.setEntityClassNames(entityClassNames);
+        }
     }
 
     private void registerClass(String className,
                                BuildProducer<ReflectiveClassBuildItem> out) {
-        log.debug("Morphium: registering {} for reflection (native image)", className);
+        log.debugf("Morphium: registering %s for reflection (native image)", className);
         out.produce(ReflectiveClassBuildItem.builder(className)
             .constructors(true)
             .methods(true)

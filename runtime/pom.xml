@@ -35,6 +35,11 @@
       <artifactId>jakarta.data-api</artifactId>
       <version>${jakarta.data.version}</version>
     </dependency>
+    <!-- Dev Services runtime config builder (required by owned() dev services API) -->
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-devservices</artifactId>
+    </dependency>
     <!-- The Morphium ORM library -->
     <dependency>
       <groupId>de.caluga</groupId>
