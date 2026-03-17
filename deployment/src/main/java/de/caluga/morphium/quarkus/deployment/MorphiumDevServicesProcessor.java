@@ -19,178 +19,81 @@ import io.quarkus.deployment.IsDevServicesSupportedByLaunchMode;
 import io.quarkus.deployment.annotations.BuildStep;
 import io.quarkus.deployment.builditem.DevServicesResultBuildItem;
 import org.eclipse.microprofile.config.ConfigProvider;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.mongodb.MongoDBContainer;
-import org.testcontainers.containers.wait.strategy.Wait;
-import org.testcontainers.utility.DockerImageName;
+import org.jboss.logging.Logger;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 
 /**
  * Quarkus build-time processor that automatically starts a MongoDB container
  * in dev and test mode when no explicit {@code quarkus.morphium.hosts} is configured.
  *
- * <p>The container is reused across live reloads (static field) and stopped
- * automatically when Quarkus shuts down (JVM shutdown hook registered on first start).
+ * <p>Uses the Quarkus {@code owned()} Dev Services API so that the framework
+ * manages the container lifecycle via the cross-classloader
+ * {@code RunningDevServicesRegistry}. This ensures container reuse across
+ * augmentation phases (e.g. different {@code @QuarkusTestProfile} switches)
+ * without relying on static fields that can be lost with classloader changes.
  *
  * <p>Dev Services are skipped when:
  * <ul>
  *   <li>{@code quarkus.morphium.devservices.enabled=false}</li>
  *   <li>{@code quarkus.morphium.hosts} is explicitly set in {@code application.properties}</li>
- *   <li>The application runs in normal (production) mode ({@code @BuildStep(onlyIfNot = IsNormal.class)})</li>
+ *   <li>{@code quarkus.morphium.replica-set-name} is explicitly set in {@code application.properties}</li>
+ *   <li>The application runs in normal (production) mode</li>
  * </ul>
  */
 public class MorphiumDevServicesProcessor {
 
-    private static final Logger log = LoggerFactory.getLogger(MorphiumDevServicesProcessor.class);
-    private static final int MONGO_PORT = 27017;
-
-    /**
-     * Shared container instance – reused across Quarkus live reloads in dev mode.
-     * Guarded by the single-threaded augmentation lifecycle; {@code volatile} ensures
-     * visibility after a classloader reload.
-     */
-    private static volatile GenericContainer<?> devContainer;
-    private static volatile boolean shutdownHookRegistered = false;
-
-    // ------------------------------------------------------------------
-    // Build step
-    // ------------------------------------------------------------------
+    private static final Logger log = Logger.getLogger(MorphiumDevServicesProcessor.class);
 
     @BuildStep(onlyIf = IsDevServicesSupportedByLaunchMode.class)
     public DevServicesResultBuildItem startDevServices(MorphiumDevServicesBuildTimeConfig config) {
 
         if (!config.enabled()) {
             log.debug("Morphium Dev Services disabled via quarkus.morphium.devservices.enabled=false");
-            stopContainerIfRunning();
             return null;
         }
 
-        // If quarkus.morphium.hosts is explicitly set in application config, respect it
         Optional<String> explicitHosts =
                 ConfigProvider.getConfig().getOptionalValue("quarkus.morphium.hosts", String.class);
-        if (explicitHosts.isPresent()) {
-            log.debug("quarkus.morphium.hosts={} – skipping Dev Services", explicitHosts.get());
-            stopContainerIfRunning();
+        Optional<String> explicitReplicaSetName =
+                ConfigProvider.getConfig().getOptionalValue("quarkus.morphium.replica-set-name", String.class);
+        if (explicitHosts.isPresent() || explicitReplicaSetName.isPresent()) {
+            log.debug("Morphium connection settings already configured – skipping Dev Services");
             return null;
         }
 
-        // Reuse a container that is still running (live reload scenario),
-        // but only when the replica-set mode matches what is currently configured.
-        // If the mode changed (e.g. standalone → replica-set), restart the container.
-        boolean wantsReplicaSet = config.replicaSet();
-        boolean currentIsReplicaSet = devContainer instanceof MongoDBContainer;
-        if (devContainer != null && devContainer.isRunning() && wantsReplicaSet == currentIsReplicaSet) {
-            log.debug("Reusing existing Morphium Dev Services container ({})",
-                    devContainer.getContainerId());
-            return buildResult(devContainer, config);
-        }
+        // Use a plain String for serviceConfig instead of a record.
+        // Quarkus compares serviceConfig across classloader boundaries via
+        // ComparableDevServicesConfig.reflectiveEquals(), which falls back to
+        // Object.equals() for objects without @ConfigMapping/@ConfigGroup interfaces.
+        // Record.equals() uses instanceof, which fails across classloaders.
+        // String.equals() compares char arrays and works reliably cross-classloader.
+        String serviceConfig = config.imageName() + "|" + config.replicaSet();
 
-        // Mode changed (standalone ↔ replica-set): stop old container before starting new one.
-        if (devContainer != null && devContainer.isRunning()) {
-            log.info("Morphium Dev Services: replica-set mode changed – stopping old container");
-            stopContainerIfRunning();
-        }
-
-        return startNewContainer(config);
-    }
-
-    // ------------------------------------------------------------------
-    // Internal helpers
-    // ------------------------------------------------------------------
-
-    private static DevServicesResultBuildItem startNewContainer(
-            MorphiumDevServicesBuildTimeConfig config) {
-
-        String image = config.imageName();
-
-        @SuppressWarnings("resource")   // lifecycle managed via shutdown hook below
-        final GenericContainer<?> container;
+        Map<String, Function<MongoDBStartable, String>> configProvider = new HashMap<>();
+        configProvider.put("quarkus.morphium.hosts", s -> s.getHost() + ":" + s.getMappedPort());
+        configProvider.put("quarkus.morphium.database", s -> config.databaseName());
 
         if (config.replicaSet()) {
-            log.info("Morphium Dev Services: starting MongoDB single-node replica set from image '{}' "
-                    + "(transactions enabled)", image);
-            // MongoDBContainer requires explicit .withReplicaSet() to enable --replSet and rs.initiate().
-            container = new MongoDBContainer(DockerImageName.parse(image)).withReplicaSet();
-        } else {
-            log.info("Morphium Dev Services: starting MongoDB standalone container from image '{}'", image);
-            container = new GenericContainer<>(DockerImageName.parse(image))
-                    .withExposedPorts(MONGO_PORT)
-                    .waitingFor(Wait.forLogMessage(".*Waiting for connections.*\n", 1));
+            configProvider.put("quarkus.morphium.replica-set-name", s -> {
+                String rsName = s.getReplicaSetName();
+                return rsName != null ? rsName : "docker-rs";
+            });
         }
 
-        try {
-            container.start();
-        } catch (Exception e) {
-            try {
-                container.close();
-            } catch (Exception suppressed) {
-                e.addSuppressed(suppressed);
-            }
-            log.warn("Morphium Dev Services: failed to start MongoDB container – "
-                    + "falling back to configured quarkus.morphium.hosts (if any). Cause: {}", e.getMessage());
-            return null;
-        }
-        devContainer = container;
+        log.infof("Morphium Dev Services: requesting MongoDB %s from image '%s' (Quarkus-managed lifecycle)",
+                config.replicaSet() ? "replica set" : "standalone", config.imageName());
 
-        int mappedPort = container.getMappedPort(MONGO_PORT);
-        log.info("Morphium Dev Services: MongoDB {} ready at localhost:{} (container {})",
-                config.replicaSet() ? "replica set" : "standalone",
-                mappedPort, container.getContainerId());
-
-        // Ensure the container is stopped on JVM exit (test runner, dev mode Ctrl-C, etc.).
-        // Guard against duplicate hooks accumulating across live-reload restarts.
-        if (!shutdownHookRegistered) {
-            Runtime.getRuntime().addShutdownHook(
-                    new Thread(MorphiumDevServicesProcessor::stopContainerIfRunning,
-                            "morphium-devservices-shutdown"));
-            shutdownHookRegistered = true;
-        }
-
-        return buildResult(container, config);
-    }
-
-    private static DevServicesResultBuildItem buildResult(
-            GenericContainer<?> container, MorphiumDevServicesBuildTimeConfig config) {
-
-        int port = container.getMappedPort(MONGO_PORT);
-        var props = new HashMap<String, String>();
-        props.put("quarkus.morphium.hosts", "localhost:" + port);
-        props.put("quarkus.morphium.database", config.databaseName());
-
-        // When running as replica set, pass the replica set name so Morphium
-        // connects in replica set mode (required for transactions).
-        if (container instanceof MongoDBContainer mongoContainer) {
-            String connStr = mongoContainer.getConnectionString();
-            int idx = connStr.indexOf("replicaSet=");
-            String rsName = idx >= 0
-                    ? connStr.substring(idx + 11).split("&")[0]
-                    : "docker-rs";
-            props.put("quarkus.morphium.replica-set-name", rsName);
-        }
-
-        return DevServicesResultBuildItem.discovered()
+        return DevServicesResultBuildItem.<MongoDBStartable>owned()
                 .feature("morphium")
-                .containerId(container.getContainerId())
-                .config(props)
+                .serviceName("morphium-mongodb")
+                .description("MongoDB (" + config.imageName() + ")")
+                .serviceConfig(serviceConfig)
+                .startable(() -> new MongoDBStartable(config.imageName(), config.replicaSet()))
+                .configProvider(configProvider)
                 .build();
-    }
-
-    private static void stopContainerIfRunning() {
-        GenericContainer<?> c = devContainer;
-        if (c != null && c.isRunning()) {
-            log.info("Morphium Dev Services: stopping MongoDB container");
-            try {
-                c.stop();
-            } catch (Exception ex) {
-                log.warn("Failed to stop Morphium Dev Services container", ex);
-            } finally {
-                devContainer = null;
-            }
-        }
     }
 }

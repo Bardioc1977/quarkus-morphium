@@ -110,6 +110,7 @@ public interface OrderRepository extends BasicRepository<OrderEntity, String> {
 
     List<OrderEntity> findByAmountLessThanEqual(double maxAmount);
 
+    @OrderBy(value = "amount", descending = true)
     List<OrderEntity> findByStatusNot(String status);
 
     List<OrderEntity> findByAmountBetween(double min, double max);
