@@ -195,7 +195,7 @@ public class MorphiumProducer {
             config.replicaSetName().orElse("(none)"),
             config.ssl().enabled());
 
-        Morphium m = new Morphium(cfg);
+        Morphium m = connectWithRetry(cfg);
 
         // Defensive: ensure the driver knows it's a replica set when a RS name is configured.
         // PooledDriver < 6.2.1 only checked host-seed count, missing single-node replica sets.
@@ -218,6 +218,48 @@ public class MorphiumProducer {
         }
 
         return m;
+    }
+
+    /**
+     * Creates a Morphium instance with retry logic. In containerized CI environments
+     * (e.g. Docker-in-Docker), the MongoDB replica set primary may not be immediately
+     * reachable after the container reports ready. This method retries the connection
+     * with exponential backoff to handle transient startup delays.
+     */
+    private Morphium connectWithRetry(MorphiumConfig cfg) {
+        int maxAttempts = config.connectRetries();
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                return new Morphium(cfg);
+            } catch (Exception e) {
+                boolean isTransient = isTransientConnectionError(e);
+                if (!isTransient || attempt == maxAttempts) {
+                    throw e;
+                }
+                long delayMs = attempt * 2000L;
+                log.warn("Morphium connection attempt {}/{} failed: {}. Retrying in {}ms...",
+                        attempt, maxAttempts, e.getMessage(), delayMs);
+                try {
+                    Thread.sleep(delayMs);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException("Interrupted while retrying Morphium connection", ie);
+                }
+            }
+        }
+        throw new IllegalStateException("Unreachable");
+    }
+
+    private static boolean isTransientConnectionError(Throwable t) {
+        while (t != null) {
+            String msg = t.getMessage();
+            if (msg != null && (msg.contains("No primary node found")
+                    || msg.contains("not connected yet"))) {
+                return true;
+            }
+            t = t.getCause();
+        }
+        return false;
     }
 
     private void ensureIndices(Morphium m) {
