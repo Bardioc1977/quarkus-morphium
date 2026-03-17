@@ -224,10 +224,10 @@ public class MorphiumProducer {
      * Creates a Morphium instance with retry logic. In containerized CI environments
      * (e.g. Docker-in-Docker), the MongoDB replica set primary may not be immediately
      * reachable after the container reports ready. This method retries the connection
-     * with exponential backoff to handle transient startup delays.
+     * with linear backoff (2s, 4s, 6s, ...) to handle transient startup delays.
      */
     private Morphium connectWithRetry(MorphiumConfig cfg) {
-        int maxAttempts = config.connectRetries();
+        int maxAttempts = Math.max(1, config.connectRetries());
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
                 return new Morphium(cfg);
