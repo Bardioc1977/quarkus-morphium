@@ -44,6 +44,9 @@ class MongoDBStartable implements Startable {
     @Override
     @SuppressWarnings("resource")
     public void start() {
+        if (container != null) {
+            return; // Already started
+        }
         // Apply the image name substitutor ourselves (e.g. hub.image.name.prefix from
         // testcontainers.properties) and mark the result as a compatible substitute.
         // This prevents Testcontainers from applying the substitutor a second time,
@@ -103,10 +106,10 @@ class MongoDBStartable implements Startable {
     String getReplicaSetName() {
         if (container instanceof MongoDBContainer mongoContainer) {
             String connStr = mongoContainer.getConnectionString();
-            int idx = connStr.indexOf("replicaSet=");
-            return idx >= 0
-                    ? connStr.substring(idx + 11).split("&")[0]
-                    : "docker-rs";
+            java.util.regex.Matcher m = java.util.regex.Pattern
+                    .compile("[?&]replicaSet=([^&]+)")
+                    .matcher(connStr);
+            return m.find() ? m.group(1) : "docker-rs";
         }
         return null;
     }
