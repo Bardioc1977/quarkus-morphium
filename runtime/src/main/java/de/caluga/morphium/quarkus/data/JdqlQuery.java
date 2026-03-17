@@ -33,14 +33,19 @@ public record JdqlQuery(
     }
 
     /**
-     * A single JDQL condition.
+     * A single JDQL condition or a parenthesized group of conditions.
+     * <p>
+     * Simple condition: {@code fieldName} and {@code operator} are set, {@code groupConditions} is null.
+     * Group condition: {@code groupConditions} and {@code groupCombinator} are set, {@code fieldName} is null.
      *
-     * @param fieldName   the entity field name
-     * @param operator    the comparison operator
-     * @param valueRef    parameter reference (":name") or literal value, null for IS NULL/IS NOT NULL
-     * @param valueRef2   second param/literal for BETWEEN, null otherwise
-     * @param literal     literal value (Boolean, etc.) when not using a parameter reference
-     * @param negated     true if the condition is prefixed with NOT
+     * @param fieldName        the entity field name (null for group conditions)
+     * @param operator         the comparison operator (null for group conditions)
+     * @param valueRef         parameter reference (":name") or literal value, null for IS NULL/IS NOT NULL
+     * @param valueRef2        second param/literal for BETWEEN, null otherwise
+     * @param literal          literal value (Boolean, etc.) when not using a parameter reference
+     * @param negated          true if the condition is prefixed with NOT
+     * @param groupConditions  nested conditions for parenthesized groups, null for simple conditions
+     * @param groupCombinator  combinator (AND/OR) for the group, null for simple conditions
      */
     public record JdqlCondition(
             String fieldName,
@@ -48,12 +53,29 @@ public record JdqlQuery(
             String valueRef,
             String valueRef2,
             Object literal,
-            boolean negated
+            boolean negated,
+            List<JdqlCondition> groupConditions,
+            Combinator groupCombinator
     ) {
         /** Convenience constructor without negation (backwards-compatible). */
         public JdqlCondition(String fieldName, Operator operator, String valueRef,
                              String valueRef2, Object literal) {
-            this(fieldName, operator, valueRef, valueRef2, literal, false);
+            this(fieldName, operator, valueRef, valueRef2, literal, false, null, null);
+        }
+
+        /** Convenience constructor with negation but no group. */
+        public JdqlCondition(String fieldName, Operator operator, String valueRef,
+                             String valueRef2, Object literal, boolean negated) {
+            this(fieldName, operator, valueRef, valueRef2, literal, negated, null, null);
+        }
+
+        /** Creates a group condition from nested conditions. */
+        public static JdqlCondition group(List<JdqlCondition> conditions, Combinator combinator) {
+            return new JdqlCondition(null, null, null, null, null, false, conditions, combinator);
+        }
+
+        public boolean isGroup() {
+            return groupConditions != null;
         }
     }
 

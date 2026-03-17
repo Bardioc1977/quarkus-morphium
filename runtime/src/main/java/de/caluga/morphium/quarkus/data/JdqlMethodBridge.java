@@ -263,6 +263,25 @@ public final class JdqlMethodBridge {
                                         Map<String, Object> paramValues,
                                         Morphium morphium,
                                         Class entityClass) {
+        // Handle parenthesized group conditions (e.g. "(a IS NULL OR a = '')")
+        if (cond.isGroup()) {
+            boolean isGroupOr = cond.groupCombinator() == JdqlQuery.Combinator.OR;
+            if (isGroupOr && cond.groupConditions().size() > 1) {
+                List<Query> orQueries = new ArrayList<>();
+                for (JdqlQuery.JdqlCondition sub : cond.groupConditions()) {
+                    Query subQuery = morphium.createQueryFor(entityClass);
+                    applyCondition(subQuery, sub, paramValues, morphium, entityClass);
+                    orQueries.add(subQuery);
+                }
+                mQuery.or(orQueries);
+            } else {
+                for (JdqlQuery.JdqlCondition sub : cond.groupConditions()) {
+                    applyCondition(mQuery, sub, paramValues, morphium, entityClass);
+                }
+            }
+            return;
+        }
+
         String mongoField = resolveMongoField(morphium, entityClass, cond.fieldName());
         var field = mQuery.f(mongoField);
 
