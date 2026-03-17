@@ -125,6 +125,15 @@ public interface MorphiumRuntimeConfig {
      */
     Optional<String> replicaSetName();
 
+    /**
+     * Number of connection attempts before giving up (minimum {@code 1}).
+     * Useful in CI environments (Docker-in-Docker) where the MongoDB replica set
+     * primary may not be immediately reachable after the container starts.
+     * Set to {@code 1} to disable retries. Values below 1 are treated as 1.
+     */
+    @WithDefault("5")
+    int connectRetries();
+
     /** Nested cache configuration. */
     CacheConfig cache();
 

@@ -279,6 +279,14 @@ public interface OrderRepository extends BasicRepository<OrderEntity, String> {
     @Query("SELECT status, COUNT(customerId) GROUP BY status")
     List<StatusCount> countNonNullCustomerByStatus();
 
+    // --- Parenthesized group queries ---
+
+    @Query("WHERE status = :status AND (customerId IS NULL OR customerId = '')")
+    List<OrderEntity> queryByStatusWithNullOrEmptyCustomerId(@Param("status") String status);
+
+    @Query("WHERE status = :status AND (amount > :min OR urgent = true) ORDER BY amount ASC")
+    List<OrderEntity> queryByStatusWithAmountOrUrgent(@Param("status") String status, @Param("min") double minAmount);
+
     // --- GAP-A8: Pagination with GROUP BY ---
 
     @Query("SELECT status, COUNT(this) GROUP BY status ORDER BY status ASC")

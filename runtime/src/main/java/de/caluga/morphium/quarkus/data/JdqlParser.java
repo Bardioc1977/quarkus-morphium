@@ -28,6 +28,7 @@ import java.util.regex.Pattern;
  *   <li>String literals: {@code field = 'value'}</li>
  *   <li>NOT prefix: {@code NOT field = :param} / {@code NOT field LIKE :pattern}</li>
  * </ul>
+ * Parenthesized groups: {@code field1 = :a AND (field2 IS NULL OR field2 = '')}
  * Not supported: JOINs, subqueries, parenthesized NOT.
  */
 public final class JdqlParser {
@@ -214,7 +215,7 @@ public final class JdqlParser {
 
         List<JdqlQuery.JdqlCondition> conditions = new ArrayList<>();
         for (String condStr : conditionStrings) {
-            conditions.add(parseCondition(condStr.trim()));
+            conditions.add(parseConditionOrGroup(condStr.trim()));
         }
 
         return new JdqlQuery(selectFields, aggregateFunctions, conditions, combinator, orderBy, groupByFields, havingConditions, havingCombinator);
@@ -262,6 +263,49 @@ public final class JdqlParser {
     }
 
     // -- Condition parsing --
+
+    /**
+     * Parses a condition string that may be a parenthesized group or a simple condition.
+     * E.g. {@code (otaUpdateError IS NULL OR otaUpdateError = '')} is parsed as a group condition.
+     */
+    private static JdqlQuery.JdqlCondition parseConditionOrGroup(String cond) {
+        String trimmed = cond.trim();
+        if (trimmed.startsWith("(") && trimmed.endsWith(")") && isBalancedGroup(trimmed)) {
+            String inner = trimmed.substring(1, trimmed.length() - 1).trim();
+            JdqlQuery.Combinator groupCombinator = JdqlQuery.Combinator.AND;
+            List<String> subConditions;
+            if (containsTopLevelOr(inner)) {
+                groupCombinator = JdqlQuery.Combinator.OR;
+                subConditions = splitTopLevel(inner, "OR");
+            } else {
+                subConditions = splitTopLevel(inner, "AND");
+            }
+            // Single condition inside parens — no group needed, just parse directly
+            if (subConditions.size() == 1) {
+                return parseConditionOrGroup(subConditions.get(0).trim());
+            }
+            List<JdqlQuery.JdqlCondition> groupConds = new ArrayList<>();
+            for (String sub : subConditions) {
+                groupConds.add(parseConditionOrGroup(sub.trim()));
+            }
+            return JdqlQuery.JdqlCondition.group(groupConds, groupCombinator);
+        }
+        return parseCondition(trimmed);
+    }
+
+    /**
+     * Checks if a string starting with '(' has the closing ')' at the very end,
+     * meaning the outer parentheses wrap the entire expression.
+     */
+    private static boolean isBalancedGroup(String s) {
+        int depth = 0;
+        for (int i = 0; i < s.length(); i++) {
+            if (s.charAt(i) == '(') depth++;
+            else if (s.charAt(i) == ')') depth--;
+            if (depth == 0 && i < s.length() - 1) return false;
+        }
+        return depth == 0;
+    }
 
     private static JdqlQuery.JdqlCondition parseCondition(String cond) {
         String trimmed = cond.trim();
@@ -415,15 +459,24 @@ public final class JdqlParser {
     // -- Top-level AND/OR splitting (avoids splitting inside BETWEEN...AND) --
 
     private static boolean containsTopLevelOr(String wherePart) {
-        // Simple check: find " OR " at the top level (not inside BETWEEN...AND)
         String upper = wherePart.toUpperCase(Locale.ROOT);
-        int idx = upper.indexOf(" OR ");
-        return idx > 0;
+        int depth = 0;
+        for (int i = 0; i < upper.length(); i++) {
+            char c = upper.charAt(i);
+            if (c == '(') depth++;
+            else if (c == ')') depth--;
+            else if (depth == 0 && i + 4 <= upper.length()
+                    && upper.startsWith(" OR ", i)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
      * Splits a WHERE clause on a top-level combinator (AND or OR).
      * Handles BETWEEN...AND by not splitting inside it.
+     * Respects parenthesis depth — never splits inside parenthesized groups.
      */
     private static List<String> splitTopLevel(String wherePart, String combinator) {
         List<String> result = new ArrayList<>();
@@ -432,18 +485,24 @@ public final class JdqlParser {
         int sepLen = sep.length();
 
         int start = 0;
-        int idx = upper.indexOf(sep, start);
+        int depth = 0;
 
-        while (idx >= 0) {
-            // Check if this AND is part of BETWEEN...AND
-            if ("AND".equals(combinator) && isBetweenAnd(upper, idx)) {
-                idx = upper.indexOf(sep, idx + sepLen);
-                continue;
+        for (int i = 0; i < upper.length(); i++) {
+            char c = upper.charAt(i);
+            if (c == '(') {
+                depth++;
+            } else if (c == ')') {
+                depth--;
+            } else if (depth == 0 && i + sepLen <= upper.length()
+                    && upper.startsWith(sep, i)) {
+                // Check if this AND is part of BETWEEN...AND
+                if ("AND".equals(combinator) && isBetweenAnd(upper, i)) {
+                    continue;
+                }
+                result.add(wherePart.substring(start, i));
+                start = i + sepLen;
+                i += sepLen - 1; // skip past separator (loop will increment)
             }
-
-            result.add(wherePart.substring(start, idx));
-            start = idx + sepLen;
-            idx = upper.indexOf(sep, start);
         }
         result.add(wherePart.substring(start));
 

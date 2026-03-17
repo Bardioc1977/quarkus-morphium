@@ -30,9 +30,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   <li>Mode-detection contract: {@code MongoDBContainer} IS-A {@code GenericContainer}
  *       but a plain {@code GenericContainer} is NOT-A {@code MongoDBContainer}</li>
  *   <li>{@code MongoDBStartable} construction and property access</li>
+ *   <li>{@code CapturedConfig} equality for container reuse decisions</li>
  * </ul>
  */
-@DisplayName("MorphiumDevServicesProcessor – owned() API and container types")
+@DisplayName("MorphiumDevServicesProcessor – static volatile container reuse")
 class MorphiumDevServicesProcessorTest {
 
     // -------------------------------------------------------------------------
@@ -74,5 +75,33 @@ class MorphiumDevServicesProcessorTest {
     void startable_containerIdNullBeforeStart() {
         var startable = new MongoDBStartable("mongo:8", false);
         assertThat(startable.getContainerId()).isNull();
+    }
+
+    // -------------------------------------------------------------------------
+    // CapturedConfig equality (drives container reuse)
+    // -------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("CapturedConfig equals when all fields match")
+    void capturedConfig_equalWhenSame() {
+        var a = new MorphiumDevServicesProcessor.CapturedConfig("mongo:8", true, "test-db");
+        var b = new MorphiumDevServicesProcessor.CapturedConfig("mongo:8", true, "test-db");
+        assertThat(a).isEqualTo(b);
+    }
+
+    @Test
+    @DisplayName("CapturedConfig not equal when image differs")
+    void capturedConfig_notEqualWhenImageDiffers() {
+        var a = new MorphiumDevServicesProcessor.CapturedConfig("mongo:7", true, "test-db");
+        var b = new MorphiumDevServicesProcessor.CapturedConfig("mongo:8", true, "test-db");
+        assertThat(a).isNotEqualTo(b);
+    }
+
+    @Test
+    @DisplayName("CapturedConfig not equal when replicaSet differs")
+    void capturedConfig_notEqualWhenReplicaSetDiffers() {
+        var a = new MorphiumDevServicesProcessor.CapturedConfig("mongo:8", false, "test-db");
+        var b = new MorphiumDevServicesProcessor.CapturedConfig("mongo:8", true, "test-db");
+        assertThat(a).isNotEqualTo(b);
     }
 }
