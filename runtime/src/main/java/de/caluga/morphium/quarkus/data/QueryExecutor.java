@@ -53,10 +53,7 @@ public final class QueryExecutor {
             case EXISTS -> query.countAll() > 0;
             case DELETE -> {
                 long count = query.countAll();
-                List toDelete = query.asList();
-                for (Object entity : toDelete) {
-                    morphium.delete(entity);
-                }
+                query.delete();
                 yield count;
             }
         };
