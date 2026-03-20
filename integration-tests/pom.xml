@@ -26,6 +26,12 @@
       <version>${project.version}</version>
     </dependency>
 
+    <!-- Health checks (optional in the extension, required here for health tests) -->
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-smallrye-health</artifactId>
+    </dependency>
+
     <!-- REST layer (for endpoint smoke tests) -->
     <dependency>
       <groupId>io.quarkus</groupId>

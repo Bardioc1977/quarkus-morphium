@@ -30,10 +30,12 @@
       <groupId>io.quarkus</groupId>
       <artifactId>quarkus-arc-deployment</artifactId>
     </dependency>
-    <!-- Health check build-time support -->
+    <!-- Health check build-time SPI — provides HealthBuildItem without
+         pulling in the full SmallRye Health extension. The health checks
+         activate only when the app includes quarkus-smallrye-health. -->
     <dependency>
       <groupId>io.quarkus</groupId>
-      <artifactId>quarkus-smallrye-health-deployment</artifactId>
+      <artifactId>quarkus-smallrye-health-spi</artifactId>
     </dependency>
     <!-- ClassGraph for @Entity scanning during build.
          Comes transitively from quarkus-morphium (runtime) → morphium. -->
