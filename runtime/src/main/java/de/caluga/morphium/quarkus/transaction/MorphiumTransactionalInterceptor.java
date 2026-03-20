@@ -117,11 +117,9 @@ public class MorphiumTransactionalInterceptor {
             return proceedWithEvents(ctx);
         }
 
-        // Disable the write buffer for this thread during the transaction.
-        // The BufferedMorphiumWriter flushes on a background thread that does NOT
-        // participate in the transaction — writes would bypass the transaction and
-        // @WriteBuffer size limits cause spurious warnings.
-        morphium.disableWriteBufferForThread();
+        // Write buffer is automatically disabled by Morphium.startTransaction()
+        // and restored by commitTransaction()/abortTransaction() — no manual
+        // disable/enable needed here.
         try {
             Object result = ctx.proceed();
             beforeCommit.fire(new MorphiumTransactionEvent(Phase.BEFORE_COMMIT));
@@ -132,8 +130,6 @@ public class MorphiumTransactionalInterceptor {
             safeAbort();
             afterRollback.fire(new MorphiumTransactionEvent(Phase.AFTER_ROLLBACK, e));
             throw e;
-        } finally {
-            morphium.enableWriteBufferForThread();
         }
     }
 
