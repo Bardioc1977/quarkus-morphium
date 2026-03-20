@@ -400,6 +400,22 @@ class JdqlParserTest {
         }
 
         @Test
+        @DisplayName("Duplicate fragment points at correct (second) occurrence")
+        void duplicateFragmentPointsAtCorrectOccurrence() {
+            // "a = :a" appears twice; the error is in the second occurrence (incomplete)
+            String jdql = "WHERE a = :a AND a > ";
+            try {
+                JdqlParser.parse(jdql);
+                org.junit.jupiter.api.Assertions.fail("Expected IllegalArgumentException");
+            } catch (IllegalArgumentException e) {
+                // Position must point past the first "a = :a AND ", i.e. at the second "a"
+                assertThat(e.getMessage()).contains("JDQL parse error at position");
+                // "a > " starts at position 17 in "WHERE a = :a AND a > "
+                assertThat(e.getMessage()).contains("position 17");
+            }
+        }
+
+        @Test
         @DisplayName("Parse error for invalid HAVING includes position")
         void havingParseErrorIncludesPosition() {
             String jdql = "SELECT COUNT(this) FROM Entity GROUP BY status HAVING badexpr";

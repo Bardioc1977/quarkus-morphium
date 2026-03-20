@@ -188,7 +188,9 @@ public final class JdqlParser {
                     havingConditions = havingResult.conditions();
                     havingCombinator = havingResult.combinator();
                 } catch (IllegalArgumentException e) {
-                    throw new IllegalArgumentException(formatParseError(jdql, havingPart, e.getMessage()), e);
+                    int havingStart = jdql.toUpperCase(Locale.ROOT).indexOf("HAVING ");
+                    throw new IllegalArgumentException(
+                            formatParseError(jdql, havingPart, Math.max(0, havingStart), e.getMessage()), e);
                 }
             }
 
@@ -243,11 +245,17 @@ public final class JdqlParser {
         }
 
         List<JdqlQuery.JdqlCondition> conditions = new ArrayList<>();
+        int searchFrom = 0;
         for (String condStr : conditionStrings) {
+            String trimmedCond = condStr.trim();
             try {
-                conditions.add(parseConditionOrGroup(condStr.trim()));
+                conditions.add(parseConditionOrGroup(trimmedCond));
             } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException(formatParseError(jdql, condStr.trim(), e.getMessage()), e);
+                throw new IllegalArgumentException(formatParseError(jdql, trimmedCond, searchFrom, e.getMessage()), e);
+            }
+            int found = jdql.indexOf(trimmedCond, searchFrom);
+            if (found >= 0) {
+                searchFrom = found + trimmedCond.length();
             }
         }
 
@@ -616,9 +624,16 @@ public final class JdqlParser {
 
     /**
      * Formats a parse error with position information and a caret pointer.
+     *
+     * @param searchFrom index in originalJdql to start searching from, avoids
+     *                   pointing at a duplicate earlier occurrence
      */
-    private static String formatParseError(String originalJdql, String failedFragment, String detail) {
-        int pos = originalJdql.indexOf(failedFragment);
+    private static String formatParseError(String originalJdql, String failedFragment,
+                                           int searchFrom, String detail) {
+        int pos = originalJdql.indexOf(failedFragment, searchFrom);
+        if (pos < 0) {
+            pos = originalJdql.indexOf(failedFragment);
+        }
         if (pos < 0) {
             return detail + "\n  JDQL: " + originalJdql;
         }
