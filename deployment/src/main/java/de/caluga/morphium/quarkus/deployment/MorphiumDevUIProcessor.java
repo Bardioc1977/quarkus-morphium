@@ -22,6 +22,8 @@ import io.quarkus.deployment.builditem.DevServicesResultBuildItem;
 import io.quarkus.devui.spi.page.CardPageBuildItem;
 import io.quarkus.devui.spi.page.Page;
 
+import org.eclipse.microprofile.config.ConfigProvider;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -76,15 +78,25 @@ public class MorphiumDevUIProcessor {
             rows.add(row("Container ID", shortId));
             rows.add(row("Status",       "Running"));
         } else {
-            String mode = devServicesConfig.replicaSet()
+            // No Dev Services container — read connection info from application config.
+            // getValue() honours @WithDefault so we see "localhost:27017" even when
+            // the property is not explicitly set in application.properties.
+            var config = ConfigProvider.getConfig();
+            String hosts = config.getOptionalValue("quarkus.morphium.atlas-url", String.class)
+                    .filter(v -> !v.isBlank())
+                    .orElseGet(() -> config.getValue("quarkus.morphium.hosts", String.class));
+            String database = config.getValue("quarkus.morphium.database", String.class);
+            boolean hasReplicaSet = config.getOptionalValue("quarkus.morphium.replica-set-name", String.class)
+                    .filter(v -> !v.isBlank())
+                    .isPresent();
+            String mode = hasReplicaSet
                     ? "Replica Set (transactions enabled)"
                     : "Standalone";
-            rows.add(row("Hosts",        "n/a"));
-            rows.add(row("Database",     "n/a"));
+            rows.add(row("Hosts",        hosts));
+            rows.add(row("Database",     database));
             rows.add(row("Mode",         mode));
-            rows.add(row("Container ID", "n/a"));
-            rows.add(row("Status",
-                    "Not started (Dev Services disabled, quarkus.morphium.hosts set, or container startup failed — check logs)"));
+            rows.add(row("Container ID", "—"));
+            rows.add(row("Status",       "External MongoDB"));
         }
         card.addBuildTimeData("connectionInfo", rows);
 
