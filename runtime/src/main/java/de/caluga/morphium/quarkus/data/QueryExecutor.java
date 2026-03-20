@@ -53,10 +53,11 @@ public final class QueryExecutor {
             case EXISTS -> query.countAll() > 0;
             case DELETE -> {
                 long count = query.countAll();
-                List toDelete = query.asList();
-                for (Object entity : toDelete) {
-                    morphium.delete(entity);
-                }
+                // Uses bulk deleteMany — does NOT fire @PreRemove/@PostRemove lifecycle
+                // callbacks. This is intentional for performance (avoids loading all entities
+                // into memory). Entities requiring lifecycle hooks should use Morphium.delete()
+                // directly instead of derived deleteBy* methods.
+                query.delete();
                 yield count;
             }
         };

@@ -204,6 +204,10 @@ public class MorphiumProducer {
             m.getDriver().setReplicaSet(true);
         }
 
+        log.info("Morphium connected (replicaSet: {}, replicaSetName: {})",
+            m.getDriver().isReplicaSet(),
+            m.getDriver().getReplicaSetName() != null ? m.getDriver().getReplicaSetName() : "(none)");
+
         // Override the default LocalDateTimeMapper with the configured format.
         // useBsonDate=true  → ISODate (native MongoDB dates, compatible with Morphia data)
         // useBsonDate=false → Map{sec, n} (legacy Morphium format)

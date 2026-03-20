@@ -1376,10 +1376,19 @@ public class MorphiumDataProcessor {
                 continue;
             }
 
-            // Check for @Param annotation
+            // Check for @Param annotation; fall back to method parameter name
+            // if compiled with -parameters (Jakarta Data spec §4.6.1)
             AnnotationInstance paramAnn = params.get(i).annotation(PARAM_ANNOTATION);
+            String paramName = null;
             if (paramAnn != null) {
-                String paramName = paramAnn.value().asString();
+                paramName = paramAnn.value().asString();
+            } else {
+                String methodParamName = params.get(i).name();
+                if (methodParamName != null) {
+                    paramName = methodParamName;
+                }
+            }
+            if (paramName != null) {
                 if (paramMapSpec.length() > 0) paramMapSpec.append(",");
                 paramMapSpec.append(paramName).append(":").append(i);
             }
