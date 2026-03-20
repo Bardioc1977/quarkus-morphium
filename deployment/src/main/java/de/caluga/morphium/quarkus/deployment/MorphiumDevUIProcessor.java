@@ -78,14 +78,17 @@ public class MorphiumDevUIProcessor {
             rows.add(row("Container ID", shortId));
             rows.add(row("Status",       "Running"));
         } else {
-            // No Dev Services container — read connection info from application config
+            // No Dev Services container — read connection info from application config.
+            // getValue() honours @WithDefault so we see "localhost:27017" even when
+            // the property is not explicitly set in application.properties.
             var config = ConfigProvider.getConfig();
-            String hosts = config.getOptionalValue("quarkus.morphium.hosts", String.class)
-                    .orElse("n/a");
-            String database = config.getOptionalValue("quarkus.morphium.database", String.class)
-                    .orElse("n/a");
+            String hosts = config.getOptionalValue("quarkus.morphium.atlas-url", String.class)
+                    .filter(v -> !v.isBlank())
+                    .orElseGet(() -> config.getValue("quarkus.morphium.hosts", String.class));
+            String database = config.getValue("quarkus.morphium.database", String.class);
             boolean hasReplicaSet = config.getOptionalValue("quarkus.morphium.replica-set-name", String.class)
-                    .isPresent() || devServicesConfig.replicaSet();
+                    .filter(v -> !v.isBlank())
+                    .isPresent();
             String mode = hasReplicaSet
                     ? "Replica Set (transactions enabled)"
                     : "Standalone";
