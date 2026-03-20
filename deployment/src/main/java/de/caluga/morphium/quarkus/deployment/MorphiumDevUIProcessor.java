@@ -84,9 +84,10 @@ public class MorphiumDevUIProcessor {
                     .orElse("n/a");
             String database = config.getOptionalValue("quarkus.morphium.database", String.class)
                     .orElse("n/a");
-            boolean hasReplicaSet = config.getOptionalValue("quarkus.morphium.replica-set-name", String.class)
-                    .isPresent() || devServicesConfig.replicaSet();
-            String mode = hasReplicaSet
+            boolean isReplicaSetConfigured = config.getOptionalValue("quarkus.morphium.replica-set-name", String.class)
+                    .filter(s -> !s.isBlank())
+                    .isPresent();
+            String mode = isReplicaSetConfigured
                     ? "Replica Set (transactions enabled)"
                     : "Standalone";
             rows.add(row("Hosts",        hosts));
