@@ -22,6 +22,8 @@ import io.quarkus.deployment.builditem.DevServicesResultBuildItem;
 import io.quarkus.devui.spi.page.CardPageBuildItem;
 import io.quarkus.devui.spi.page.Page;
 
+import org.eclipse.microprofile.config.ConfigProvider;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -76,15 +78,22 @@ public class MorphiumDevUIProcessor {
             rows.add(row("Container ID", shortId));
             rows.add(row("Status",       "Running"));
         } else {
-            String mode = devServicesConfig.replicaSet()
+            // No Dev Services container — read connection info from application config
+            var config = ConfigProvider.getConfig();
+            String hosts = config.getOptionalValue("quarkus.morphium.hosts", String.class)
+                    .orElse("n/a");
+            String database = config.getOptionalValue("quarkus.morphium.database", String.class)
+                    .orElse("n/a");
+            boolean hasReplicaSet = config.getOptionalValue("quarkus.morphium.replica-set-name", String.class)
+                    .isPresent() || devServicesConfig.replicaSet();
+            String mode = hasReplicaSet
                     ? "Replica Set (transactions enabled)"
                     : "Standalone";
-            rows.add(row("Hosts",        "n/a"));
-            rows.add(row("Database",     "n/a"));
+            rows.add(row("Hosts",        hosts));
+            rows.add(row("Database",     database));
             rows.add(row("Mode",         mode));
-            rows.add(row("Container ID", "n/a"));
-            rows.add(row("Status",
-                    "Not started (Dev Services disabled, quarkus.morphium.hosts set, or container startup failed — check logs)"));
+            rows.add(row("Container ID", "—"));
+            rows.add(row("Status",       "External MongoDB"));
         }
         card.addBuildTimeData("connectionInfo", rows);
 
