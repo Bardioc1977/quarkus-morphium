@@ -364,6 +364,11 @@ public final class JdqlMethodBridge {
      */
     private static JdqlQuery.JdqlCondition negateCondition(JdqlQuery.JdqlCondition cond) {
         if (cond.isGroup()) {
+            if (cond.negated()) {
+                // Double negation: NOT applied to already-negated group → cancel out
+                return JdqlQuery.JdqlCondition.group(cond.groupConditions(), cond.groupCombinator());
+            }
+            // De Morgan: NOT (A OR B) = NOT A AND NOT B
             JdqlQuery.Combinator flipped = cond.groupCombinator() == JdqlQuery.Combinator.OR
                     ? JdqlQuery.Combinator.AND : JdqlQuery.Combinator.OR;
             List<JdqlQuery.JdqlCondition> negatedChildren = new ArrayList<>();

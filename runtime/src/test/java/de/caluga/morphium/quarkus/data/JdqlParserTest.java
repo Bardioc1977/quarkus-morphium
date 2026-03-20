@@ -339,6 +339,46 @@ class JdqlParserTest {
             assertThat(cond.operator()).isEqualTo(JdqlQuery.Operator.EQ);
             assertThat(cond.negated()).isTrue();
         }
+
+        @Test
+        @DisplayName("NOT (NOT (...)) double negation cancels out")
+        void doubleNegationCancels() {
+            String jdql = "WHERE NOT (NOT (a = :a OR b = :b))";
+            JdqlQuery result = JdqlParser.parse(jdql);
+
+            assertThat(result.conditions()).hasSize(1);
+            JdqlQuery.JdqlCondition cond = result.conditions().get(0);
+            assertThat(cond.isGroup()).isTrue();
+            assertThat(cond.negated()).isFalse(); // double NOT cancels
+            assertThat(cond.groupCombinator()).isEqualTo(JdqlQuery.Combinator.OR);
+            assertThat(cond.groupConditions()).hasSize(2);
+        }
+
+        @Test
+        @DisplayName("NOT (a AND NOT (b OR c)) — nested negated group preserved")
+        void nestedNegatedGroup() {
+            String jdql = "WHERE NOT (a = :a AND NOT (b = :b OR c = :c))";
+            JdqlQuery result = JdqlParser.parse(jdql);
+
+            assertThat(result.conditions()).hasSize(1);
+            JdqlQuery.JdqlCondition outer = result.conditions().get(0);
+            assertThat(outer.isGroup()).isTrue();
+            assertThat(outer.negated()).isTrue();
+            assertThat(outer.groupCombinator()).isEqualTo(JdqlQuery.Combinator.AND);
+            assertThat(outer.groupConditions()).hasSize(2);
+
+            // First child: a = :a (simple condition)
+            JdqlQuery.JdqlCondition first = outer.groupConditions().get(0);
+            assertThat(first.isGroup()).isFalse();
+            assertThat(first.fieldName()).isEqualTo("a");
+
+            // Second child: NOT (b = :b OR c = :c) — inner negated group
+            JdqlQuery.JdqlCondition inner = outer.groupConditions().get(1);
+            assertThat(inner.isGroup()).isTrue();
+            assertThat(inner.negated()).isTrue();
+            assertThat(inner.groupCombinator()).isEqualTo(JdqlQuery.Combinator.OR);
+            assertThat(inner.groupConditions()).hasSize(2);
+        }
     }
 
     @Nested

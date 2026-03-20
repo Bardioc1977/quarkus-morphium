@@ -310,7 +310,8 @@ public final class JdqlParser {
             if (afterNot.startsWith("(") && afterNot.endsWith(")") && isBalancedGroup(afterNot)) {
                 JdqlQuery.JdqlCondition innerGroup = parseConditionOrGroup(afterNot);
                 if (innerGroup.isGroup()) {
-                    return new JdqlQuery.JdqlCondition(null, null, null, null, null, true,
+                    // XOR negation: NOT on an already-negated group cancels out
+                    return new JdqlQuery.JdqlCondition(null, null, null, null, null, !innerGroup.negated(),
                             innerGroup.groupConditions(), innerGroup.groupCombinator());
                 }
                 // Single condition wrapped in parens after NOT → just negate it
