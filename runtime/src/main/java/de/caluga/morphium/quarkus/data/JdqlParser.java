@@ -29,7 +29,8 @@ import java.util.regex.Pattern;
  *   <li>NOT prefix: {@code NOT field = :param} / {@code NOT field LIKE :pattern}</li>
  * </ul>
  * Parenthesized groups: {@code field1 = :a AND (field2 IS NULL OR field2 = '')}
- * Not supported: JOINs, subqueries, parenthesized NOT.
+ * NOT prefix: {@code NOT field BETWEEN :min AND :max}, {@code NOT (cond1 OR cond2)}
+ * Not supported: JOINs, subqueries.
  */
 public final class JdqlParser {
 
@@ -48,6 +49,30 @@ public final class JdqlParser {
 
     // Match numeric literal (int or double)
     private static final Pattern NUMERIC_LITERAL = Pattern.compile("-?\\d+(\\.\\d+)?");
+
+    // BETWEEN :min AND :max
+    private static final Pattern BETWEEN_PATTERN = Pattern.compile(
+            "(.+?)\\s+BETWEEN\\s+(.+?)\\s+AND\\s+(.+)", Pattern.CASE_INSENSITIVE);
+
+    // NOT IN :param
+    private static final Pattern NOT_IN_PATTERN = Pattern.compile(
+            "(.+?)\\s+NOT\\s+IN\\s+(.+)", Pattern.CASE_INSENSITIVE);
+
+    // IN :param
+    private static final Pattern IN_PATTERN = Pattern.compile(
+            "(.+?)\\s+IN\\s+(.+)", Pattern.CASE_INSENSITIVE);
+
+    // LIKE :param
+    private static final Pattern LIKE_PATTERN = Pattern.compile(
+            "(.+?)\\s+LIKE\\s+(.+)", Pattern.CASE_INSENSITIVE);
+
+    // Comparison operators: >=, <=, <>, !=, >, <, =
+    private static final Pattern COMP_PATTERN = Pattern.compile("(.+?)\\s*(>=|<=|<>|!=|>|<|=)\\s*(.+)");
+
+    // HAVING condition: AGGREGATE(field) operator value
+    private static final Pattern HAVING_PATTERN = Pattern.compile(
+            "(?i)(COUNT|SUM|AVG|MIN|MAX)\\s*\\(\\s*([a-zA-Z_][a-zA-Z0-9_.]*|this)\\s*\\)" +
+            "\\s*(>=|<=|<>|!=|>|<|=)\\s*(.+)");
 
     /**
      * Parses a JDQL query string.
@@ -158,9 +183,13 @@ public final class JdqlParser {
             if (havingIdx >= 0) {
                 String havingPart = groupByPart.substring(havingIdx + " HAVING ".length()).trim();
                 groupByPart = groupByPart.substring(0, havingIdx).trim();
-                HavingParseResult havingResult = parseHavingClause(havingPart);
-                havingConditions = havingResult.conditions();
-                havingCombinator = havingResult.combinator();
+                try {
+                    HavingParseResult havingResult = parseHavingClause(havingPart);
+                    havingConditions = havingResult.conditions();
+                    havingCombinator = havingResult.combinator();
+                } catch (IllegalArgumentException e) {
+                    throw new IllegalArgumentException(formatParseError(jdql, havingPart, e.getMessage()), e);
+                }
             }
 
             groupByFields = Arrays.stream(groupByPart.split(","))
@@ -215,7 +244,11 @@ public final class JdqlParser {
 
         List<JdqlQuery.JdqlCondition> conditions = new ArrayList<>();
         for (String condStr : conditionStrings) {
-            conditions.add(parseConditionOrGroup(condStr.trim()));
+            try {
+                conditions.add(parseConditionOrGroup(condStr.trim()));
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException(formatParseError(jdql, condStr.trim(), e.getMessage()), e);
+            }
         }
 
         return new JdqlQuery(selectFields, aggregateFunctions, conditions, combinator, orderBy, groupByFields, havingConditions, havingCombinator);
@@ -270,6 +303,23 @@ public final class JdqlParser {
      */
     private static JdqlQuery.JdqlCondition parseConditionOrGroup(String cond) {
         String trimmed = cond.trim();
+
+        // NOT (...) group negation
+        if (trimmed.toUpperCase(Locale.ROOT).startsWith("NOT ")) {
+            String afterNot = trimmed.substring(4).trim();
+            if (afterNot.startsWith("(") && afterNot.endsWith(")") && isBalancedGroup(afterNot)) {
+                JdqlQuery.JdqlCondition innerGroup = parseConditionOrGroup(afterNot);
+                if (innerGroup.isGroup()) {
+                    return new JdqlQuery.JdqlCondition(null, null, null, null, null, true,
+                            innerGroup.groupConditions(), innerGroup.groupCombinator());
+                }
+                // Single condition wrapped in parens after NOT → just negate it
+                return new JdqlQuery.JdqlCondition(innerGroup.fieldName(), innerGroup.operator(),
+                        innerGroup.valueRef(), innerGroup.valueRef2(), innerGroup.literal(),
+                        !innerGroup.negated(), null, null);
+            }
+        }
+
         if (trimmed.startsWith("(") && trimmed.endsWith(")") && isBalancedGroup(trimmed)) {
             String inner = trimmed.substring(1, trimmed.length() - 1).trim();
             JdqlQuery.Combinator groupCombinator = JdqlQuery.Combinator.AND;
@@ -334,9 +384,7 @@ public final class JdqlParser {
         }
 
         // BETWEEN :min AND :max
-        Pattern betweenPattern = Pattern.compile(
-                "(.+?)\\s+BETWEEN\\s+(.+?)\\s+AND\\s+(.+)", Pattern.CASE_INSENSITIVE);
-        Matcher betweenMatcher = betweenPattern.matcher(trimmed);
+        Matcher betweenMatcher = BETWEEN_PATTERN.matcher(trimmed);
         if (betweenMatcher.matches()) {
             String field = betweenMatcher.group(1).trim();
             String minRef = betweenMatcher.group(2).trim();
@@ -346,9 +394,7 @@ public final class JdqlParser {
         }
 
         // NOT IN :param (within condition, NOT as infix operator on field)
-        Pattern notInPattern = Pattern.compile(
-                "(.+?)\\s+NOT\\s+IN\\s+(.+)", Pattern.CASE_INSENSITIVE);
-        Matcher notInMatcher = notInPattern.matcher(trimmed);
+        Matcher notInMatcher = NOT_IN_PATTERN.matcher(trimmed);
         if (notInMatcher.matches()) {
             String field = notInMatcher.group(1).trim();
             String paramRef = notInMatcher.group(2).trim();
@@ -359,9 +405,7 @@ public final class JdqlParser {
         }
 
         // IN :param
-        Pattern inPattern = Pattern.compile(
-                "(.+?)\\s+IN\\s+(.+)", Pattern.CASE_INSENSITIVE);
-        Matcher inMatcher = inPattern.matcher(trimmed);
+        Matcher inMatcher = IN_PATTERN.matcher(trimmed);
         if (inMatcher.matches()) {
             String field = inMatcher.group(1).trim();
             String paramRef = inMatcher.group(2).trim();
@@ -370,9 +414,7 @@ public final class JdqlParser {
         }
 
         // LIKE :param
-        Pattern likePattern = Pattern.compile(
-                "(.+?)\\s+LIKE\\s+(.+)", Pattern.CASE_INSENSITIVE);
-        Matcher likeMatcher = likePattern.matcher(trimmed);
+        Matcher likeMatcher = LIKE_PATTERN.matcher(trimmed);
         if (likeMatcher.matches()) {
             String field = likeMatcher.group(1).trim();
             String paramRef = likeMatcher.group(2).trim();
@@ -381,9 +423,7 @@ public final class JdqlParser {
         }
 
         // Comparison operators: >=, <=, <>, !=, >, <, =
-        // Use a pattern that handles quoted string values (e.g., 'value with spaces')
-        Pattern compPattern = Pattern.compile("(.+?)\\s*(>=|<=|<>|!=|>|<|=)\\s*(.+)");
-        Matcher compMatcher = compPattern.matcher(trimmed);
+        Matcher compMatcher = COMP_PATTERN.matcher(trimmed);
         if (compMatcher.matches()) {
             String field = compMatcher.group(1).trim();
             String op = compMatcher.group(2);
@@ -547,10 +587,7 @@ public final class JdqlParser {
     }
 
     private static JdqlQuery.HavingCondition parseHavingCondition(String cond) {
-        Pattern havingPattern = Pattern.compile(
-                "(?i)(COUNT|SUM|AVG|MIN|MAX)\\s*\\(\\s*([a-zA-Z_][a-zA-Z0-9_.]*|this)\\s*\\)" +
-                "\\s*(>=|<=|<>|!=|>|<|=)\\s*(.+)");
-        Matcher m = havingPattern.matcher(cond.trim());
+        Matcher m = HAVING_PATTERN.matcher(cond.trim());
         if (!m.matches()) {
             throw new IllegalArgumentException("Cannot parse HAVING condition: " + cond
                     + ". Expected: AGGREGATE(field) operator value");
@@ -574,5 +611,18 @@ public final class JdqlParser {
         };
 
         return new JdqlQuery.HavingCondition(aggFuncStr, operator, extractParamOrLiteral(valueRef));
+    }
+
+    /**
+     * Formats a parse error with position information and a caret pointer.
+     */
+    private static String formatParseError(String originalJdql, String failedFragment, String detail) {
+        int pos = originalJdql.indexOf(failedFragment);
+        if (pos < 0) {
+            return detail + "\n  JDQL: " + originalJdql;
+        }
+        return "JDQL parse error at position " + pos + ": " + detail
+                + "\n  " + originalJdql
+                + "\n  " + " ".repeat(pos) + "^";
     }
 }

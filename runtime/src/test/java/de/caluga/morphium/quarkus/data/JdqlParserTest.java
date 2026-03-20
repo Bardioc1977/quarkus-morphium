@@ -237,6 +237,143 @@ class JdqlParserTest {
     }
 
     @Nested
+    @DisplayName("NOT BETWEEN support")
+    class NotBetweenTests {
+
+        @Test
+        @DisplayName("NOT field BETWEEN :min AND :max")
+        void notBetween() {
+            String jdql = "WHERE NOT price BETWEEN :min AND :max";
+            JdqlQuery result = JdqlParser.parse(jdql);
+
+            assertThat(result.conditions()).hasSize(1);
+            JdqlQuery.JdqlCondition cond = result.conditions().get(0);
+            assertThat(cond.operator()).isEqualTo(JdqlQuery.Operator.BETWEEN);
+            assertThat(cond.fieldName()).isEqualTo("price");
+            assertThat(cond.valueRef()).isEqualTo(":min");
+            assertThat(cond.valueRef2()).isEqualTo(":max");
+            assertThat(cond.negated()).isTrue();
+        }
+
+        @Test
+        @DisplayName("NOT BETWEEN combined with other AND conditions")
+        void notBetweenWithAnd() {
+            String jdql = "WHERE status = :status AND NOT price BETWEEN :min AND :max";
+            JdqlQuery result = JdqlParser.parse(jdql);
+
+            assertThat(result.combinator()).isEqualTo(JdqlQuery.Combinator.AND);
+            assertThat(result.conditions()).hasSize(2);
+
+            JdqlQuery.JdqlCondition first = result.conditions().get(0);
+            assertThat(first.fieldName()).isEqualTo("status");
+            assertThat(first.operator()).isEqualTo(JdqlQuery.Operator.EQ);
+
+            JdqlQuery.JdqlCondition second = result.conditions().get(1);
+            assertThat(second.operator()).isEqualTo(JdqlQuery.Operator.BETWEEN);
+            assertThat(second.negated()).isTrue();
+        }
+    }
+
+    @Nested
+    @DisplayName("NOT (...) group negation")
+    class NotGroupTests {
+
+        @Test
+        @DisplayName("NOT (a = :a OR b = :b) creates negated group")
+        void notOrGroup() {
+            String jdql = "WHERE NOT (a = :a OR b = :b)";
+            JdqlQuery result = JdqlParser.parse(jdql);
+
+            assertThat(result.conditions()).hasSize(1);
+            JdqlQuery.JdqlCondition cond = result.conditions().get(0);
+            assertThat(cond.isGroup()).isTrue();
+            assertThat(cond.negated()).isTrue();
+            assertThat(cond.groupCombinator()).isEqualTo(JdqlQuery.Combinator.OR);
+            assertThat(cond.groupConditions()).hasSize(2);
+            assertThat(cond.groupConditions().get(0).fieldName()).isEqualTo("a");
+            assertThat(cond.groupConditions().get(1).fieldName()).isEqualTo("b");
+        }
+
+        @Test
+        @DisplayName("NOT (a = :a AND b = :b) creates negated group")
+        void notAndGroup() {
+            String jdql = "WHERE NOT (a = :a AND b = :b)";
+            JdqlQuery result = JdqlParser.parse(jdql);
+
+            assertThat(result.conditions()).hasSize(1);
+            JdqlQuery.JdqlCondition cond = result.conditions().get(0);
+            assertThat(cond.isGroup()).isTrue();
+            assertThat(cond.negated()).isTrue();
+            assertThat(cond.groupCombinator()).isEqualTo(JdqlQuery.Combinator.AND);
+            assertThat(cond.groupConditions()).hasSize(2);
+        }
+
+        @Test
+        @DisplayName("x = :x AND NOT (a = :a OR b = :b)")
+        void notGroupCombinedWithAnd() {
+            String jdql = "WHERE x = :x AND NOT (a = :a OR b = :b)";
+            JdqlQuery result = JdqlParser.parse(jdql);
+
+            assertThat(result.combinator()).isEqualTo(JdqlQuery.Combinator.AND);
+            assertThat(result.conditions()).hasSize(2);
+
+            assertThat(result.conditions().get(0).isGroup()).isFalse();
+            assertThat(result.conditions().get(0).fieldName()).isEqualTo("x");
+
+            JdqlQuery.JdqlCondition group = result.conditions().get(1);
+            assertThat(group.isGroup()).isTrue();
+            assertThat(group.negated()).isTrue();
+            assertThat(group.groupCombinator()).isEqualTo(JdqlQuery.Combinator.OR);
+        }
+
+        @Test
+        @DisplayName("NOT (single condition) just negates it")
+        void notSingleConditionInParens() {
+            String jdql = "WHERE NOT (a = :a)";
+            JdqlQuery result = JdqlParser.parse(jdql);
+
+            assertThat(result.conditions()).hasSize(1);
+            JdqlQuery.JdqlCondition cond = result.conditions().get(0);
+            assertThat(cond.isGroup()).isFalse();
+            assertThat(cond.fieldName()).isEqualTo("a");
+            assertThat(cond.operator()).isEqualTo(JdqlQuery.Operator.EQ);
+            assertThat(cond.negated()).isTrue();
+        }
+    }
+
+    @Nested
+    @DisplayName("Error messages with position info")
+    class ErrorMessageTests {
+
+        @Test
+        @DisplayName("Parse error includes position and caret")
+        void parseErrorIncludesPosition() {
+            String jdql = "WHERE name = :name AND status > ";
+            try {
+                JdqlParser.parse(jdql);
+                org.junit.jupiter.api.Assertions.fail("Expected IllegalArgumentException");
+            } catch (IllegalArgumentException e) {
+                assertThat(e.getMessage()).contains("JDQL parse error at position");
+                assertThat(e.getMessage()).contains("^");
+                assertThat(e.getMessage()).contains(jdql);
+            }
+        }
+
+        @Test
+        @DisplayName("Parse error for invalid HAVING includes position")
+        void havingParseErrorIncludesPosition() {
+            String jdql = "SELECT COUNT(this) FROM Entity GROUP BY status HAVING badexpr";
+            try {
+                JdqlParser.parse(jdql);
+                org.junit.jupiter.api.Assertions.fail("Expected IllegalArgumentException");
+            } catch (IllegalArgumentException e) {
+                assertThat(e.getMessage()).contains("JDQL parse error at position");
+                assertThat(e.getMessage()).contains("^");
+            }
+        }
+    }
+
+    @Nested
     @DisplayName("ORDER BY with parenthesized groups")
     class OrderByWithGroupTests {
 
