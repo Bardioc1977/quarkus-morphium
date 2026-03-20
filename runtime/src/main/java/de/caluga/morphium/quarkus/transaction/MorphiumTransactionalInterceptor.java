@@ -117,9 +117,15 @@ public class MorphiumTransactionalInterceptor {
             return proceedWithEvents(ctx);
         }
 
-        // Write buffer is automatically disabled by Morphium.startTransaction()
-        // and restored by commitTransaction()/abortTransaction() — no manual
-        // disable/enable needed here.
+        // Disable the write buffer for this thread while the transaction is active.
+        // BufferedMorphiumWriter flushes on a background thread that does NOT
+        // participate in the transaction — writes would bypass the transaction scope.
+        // Save the current state so we only re-enable if it was enabled before,
+        // avoiding clobbering a caller that had already disabled the write buffer.
+        boolean writeBufferWasEnabled = morphium.isWriteBufferEnabledForThread();
+        if (writeBufferWasEnabled) {
+            morphium.disableWriteBufferForThread();
+        }
         try {
             Object result = ctx.proceed();
             beforeCommit.fire(new MorphiumTransactionEvent(Phase.BEFORE_COMMIT));
@@ -130,6 +136,10 @@ public class MorphiumTransactionalInterceptor {
             safeAbort();
             afterRollback.fire(new MorphiumTransactionEvent(Phase.AFTER_ROLLBACK, e));
             throw e;
+        } finally {
+            if (writeBufferWasEnabled) {
+                morphium.enableWriteBufferForThread();
+            }
         }
     }
 
