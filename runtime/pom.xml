@@ -8,7 +8,7 @@
   <parent>
     <groupId>io.quarkiverse.morphium</groupId>
     <artifactId>quarkus-morphium-parent</artifactId>
-    <version>1.1.1-SNAPSHOT</version>
+    <version>1.1.1</version>
   </parent>
 
   <artifactId>quarkus-morphium</artifactId>
@@ -24,10 +24,12 @@
       <groupId>io.quarkus</groupId>
       <artifactId>quarkus-core</artifactId>
     </dependency>
-    <!-- MicroProfile Health API (provided by quarkus-smallrye-health) -->
+    <!-- MicroProfile Health API — optional so downstream apps that do not
+         include quarkus-smallrye-health are not forced into the health extension. -->
     <dependency>
       <groupId>io.quarkus</groupId>
       <artifactId>quarkus-smallrye-health</artifactId>
+      <optional>true</optional>
     </dependency>
     <!-- Jakarta Data API -->
     <dependency>

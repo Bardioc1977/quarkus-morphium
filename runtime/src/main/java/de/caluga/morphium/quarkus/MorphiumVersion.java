@@ -52,7 +52,7 @@ public final class MorphiumVersion {
         return EXTENSION_VERSION;
     }
 
-    /** Returns the Morphium core library version (e.g. {@code "6.2.1-SNAPSHOT"}). */
+    /** Returns the Morphium core library version (e.g. {@code "6.2.1"}). */
     public static String morphiumVersion() {
         return MORPHIUM_VERSION;
     }

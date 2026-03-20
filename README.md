@@ -1,6 +1,6 @@
 # Quarkus Morphium Extension
 
-[![Version](https://img.shields.io/badge/version-1.1.0-blue)](https://github.com/Bardioc1977/quarkus-morphium/releases/tag/v1.1.0)
+[![Version](https://img.shields.io/badge/version-1.1.1-blue)](https://github.com/Bardioc1977/quarkus-morphium/releases/tag/v1.1.1)
 [![Build](https://github.com/Bardioc1977/quarkus-morphium/actions/workflows/build.yml/badge.svg)](https://github.com/Bardioc1977/quarkus-morphium/actions/workflows/build.yml)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Quarkus](https://img.shields.io/badge/Quarkus-3.32.3-blue)](https://quarkus.io)
@@ -9,15 +9,27 @@
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-brightgreen)](https://bardioc1977.github.io/quarkus-morphium/dev/index.html)
 [![Live Demo](https://img.shields.io/badge/demo-morphium.kopp--cloud.de-blueviolet)](https://morphium.kopp-cloud.de)
 
-> **Note:** This extension is built on the [Bardioc1977/morphium](https://github.com/Bardioc1977/morphium) fork
-> (currently **6.2.1-SNAPSHOT**). Fork improvements are being contributed back to the
-> upstream [sboesebeck/morphium](https://github.com/sboesebeck/morphium) project via pull requests and are
-> progressively merged. Try the **[Live Demo](https://morphium.kopp-cloud.de)** to see all features in action.
+> **Note:** This extension is built on [Morphium](https://github.com/sboesebeck/morphium)
+> **6.2.1** (upstream release). All fork improvements have been contributed back and merged.
+> Try the **[Live Demo](https://morphium.kopp-cloud.de)** to see all features in action.
 
 A [Quarkus](https://quarkus.io) CDI extension for [Morphium](https://github.com/sboesebeck/morphium),
 an actively maintained MongoDB ORM for Java — with full **Jakarta Data 1.0** support.
 
-### What's new in v1.1.0
+### What's new in v1.1.1
+
+- **Morphium 6.2.1** — now built against the upstream release (no longer requires fork SNAPSHOT)
+- **JDQL `NOT BETWEEN`** — `WHERE NOT price BETWEEN :min AND :max`
+- **JDQL `NOT (...)` groups** — `WHERE NOT (status = 'OPEN' OR status = 'PENDING')` with De Morgan transformation
+- **JDQL error messages** — parse errors now include position and caret pointer
+- **Optional health checks** — `quarkus-smallrye-health` is no longer forced on downstream apps
+- **Dev UI fix** — external MongoDB connections now show actual host/database instead of `n/a`
+- **deleteBy* fix** — uses `query.delete()` instead of loading all entities into memory
+- **Write buffer in transactions** — `@MorphiumTransactional` disables write buffering automatically
+- **Regex patterns extracted** — JDQL parser patterns compiled once as static fields
+
+<details>
+<summary>What was new in v1.1.0</summary>
 
 - **JDQL Aggregation:** `COUNT`, `SUM`, `AVG`, `MIN`, `MAX` with `GROUP BY` (single + multi-field), `HAVING` (AND/OR), `COUNT(field)` NULL filtering
 - **Stream:** `Stream<T>` return type with cursor-backed lazy loading
@@ -29,6 +41,7 @@ an actively maintained MongoDB ORM for Java — with full **Jakarta Data 1.0** s
 - **Jakarta Data exceptions:** `EmptyResultException`, `NonUniqueResultException`
 - **New query operators:** Contains, Empty, Size, Matches, IgnoreCase, deleteBy*
 - **223 integration tests** — all green
+</details>
 
 **[Live Demo](https://morphium.kopp-cloud.de)** | **[Documentation](https://bardioc1977.github.io/quarkus-morphium/dev/index.html)** | **[Showcase Source](https://github.com/Bardioc1977/quarkus-morphium-showcase)**
 
@@ -176,7 +189,7 @@ aggregation pipelines, bulk updates, and anything beyond standard CRUD.
 |---|---|
 | Java | 21 |
 | Quarkus | 3.32.1 |
-| Morphium | 6.2.1-SNAPSHOT ([Bardioc1977/morphium](https://github.com/Bardioc1977/morphium)) |
+| Morphium | 6.2.1 ([sboesebeck/morphium](https://github.com/sboesebeck/morphium)) |
 
 ## Installation
 
@@ -186,7 +199,7 @@ Add the extension to your `pom.xml`:
 <dependency>
     <groupId>io.quarkiverse.morphium</groupId>
     <artifactId>quarkus-morphium</artifactId>
-    <version>1.1.0</version>
+    <version>1.1.1</version>
 </dependency>
 ```
 
@@ -197,7 +210,7 @@ Add the extension to your `pom.xml`:
 > cd quarkus-morphium
 > mvn install -DskipTests
 > ```
-> Then use `groupId: io.quarkiverse.morphium`, `artifactId: quarkus-morphium`, `version: 1.1.1-SNAPSHOT`.
+> Then use `groupId: io.quarkiverse.morphium`, `artifactId: quarkus-morphium`, `version: 1.1.1`.
 
 ### GitHub Packages (interim)
 
@@ -411,7 +424,7 @@ Once a public replacement API exists, Morphium will migrate to it.
 ## Building from Source
 
 ```bash
-# Requires Morphium 6.2.1-SNAPSHOT from Bardioc1977/morphium
+# Requires Morphium 6.2.1
 mvn install
 
 # Skip tests
