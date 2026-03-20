@@ -265,6 +265,19 @@ public final class JdqlMethodBridge {
                                         Class entityClass) {
         // Handle parenthesized group conditions (e.g. "(a IS NULL OR a = '')")
         if (cond.isGroup()) {
+            if (cond.negated()) {
+                // NOT (...) → De Morgan: NOT (A OR B) = NOT A AND NOT B
+                //                        NOT (A AND B) = NOT A OR NOT B
+                JdqlQuery.Combinator flipped = cond.groupCombinator() == JdqlQuery.Combinator.OR
+                        ? JdqlQuery.Combinator.AND : JdqlQuery.Combinator.OR;
+                List<JdqlQuery.JdqlCondition> negatedSubs = new ArrayList<>();
+                for (JdqlQuery.JdqlCondition sub : cond.groupConditions()) {
+                    negatedSubs.add(negateCondition(sub));
+                }
+                applyCondition(mQuery, JdqlQuery.JdqlCondition.group(negatedSubs, flipped),
+                        paramValues, morphium, entityClass);
+                return;
+            }
             boolean isGroupOr = cond.groupCombinator() == JdqlQuery.Combinator.OR;
             if (isGroupOr && cond.groupConditions().size() > 1) {
                 List<Query> orQueries = new ArrayList<>();
@@ -310,20 +323,21 @@ public final class JdqlMethodBridge {
             case LT -> field.lt(value);
             case LTE -> field.lte(value);
             case BETWEEN -> {
-                // NOT BETWEEN a AND b → field < a OR field > b
-                // For simplicity, use $not with $gte/$lte range — but that's complex in Morphium.
-                // Instead: split into two conditions via OR (not directly possible on a single query).
-                // Fallback: use the non-negated form since the parser already inverts for IS_NULL/NOT_IN.
-                // For BETWEEN with negation, the parser sets negated=true and we invert here.
-                // Since there's no clean single-operator inversion for BETWEEN,
-                // we throw for now — the parser documents this limitation.
                 Object value2 = resolveValue(cond.valueRef2(), paramValues);
                 if (cond.negated()) {
-                    throw new UnsupportedOperationException(
-                            "NOT BETWEEN is not supported in JDQL v1. Use 'field < :min OR field > :max' instead.");
+                    // NOT BETWEEN a AND b → field < a OR field > b
+                    List<Query> orQueries = new ArrayList<>();
+                    Query ltQuery = morphium.createQueryFor(entityClass);
+                    ltQuery.f(mongoField).lt(value);
+                    orQueries.add(ltQuery);
+                    Query gtQuery = morphium.createQueryFor(entityClass);
+                    gtQuery.f(mongoField).gt(value2);
+                    orQueries.add(gtQuery);
+                    mQuery.or(orQueries);
+                } else {
+                    field.gte(value);
+                    mQuery.f(mongoField).lte(value2);
                 }
-                field.gte(value);
-                mQuery.f(mongoField).lte(value2);
             }
             case IN -> field.in((Collection) value);
             case NOT_IN -> field.nin((Collection) value);
@@ -342,6 +356,29 @@ public final class JdqlMethodBridge {
             case IS_NULL -> field.eq(null);
             case IS_NOT_NULL -> field.ne(null);
         }
+    }
+
+    /**
+     * Negates a condition for De Morgan transformation of NOT (...) groups.
+     * Simple conditions get their negated flag flipped; groups are recursively De Morgan'd.
+     */
+    private static JdqlQuery.JdqlCondition negateCondition(JdqlQuery.JdqlCondition cond) {
+        if (cond.isGroup()) {
+            if (cond.negated()) {
+                // Double negation: NOT applied to already-negated group → cancel out
+                return JdqlQuery.JdqlCondition.group(cond.groupConditions(), cond.groupCombinator());
+            }
+            // De Morgan: NOT (A OR B) = NOT A AND NOT B
+            JdqlQuery.Combinator flipped = cond.groupCombinator() == JdqlQuery.Combinator.OR
+                    ? JdqlQuery.Combinator.AND : JdqlQuery.Combinator.OR;
+            List<JdqlQuery.JdqlCondition> negatedChildren = new ArrayList<>();
+            for (JdqlQuery.JdqlCondition child : cond.groupConditions()) {
+                negatedChildren.add(negateCondition(child));
+            }
+            return JdqlQuery.JdqlCondition.group(negatedChildren, flipped);
+        }
+        return new JdqlQuery.JdqlCondition(cond.fieldName(), cond.operator(), cond.valueRef(),
+                cond.valueRef2(), cond.literal(), !cond.negated(), null, null);
     }
 
     /**
