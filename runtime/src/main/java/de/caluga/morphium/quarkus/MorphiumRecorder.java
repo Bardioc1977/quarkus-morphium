@@ -15,6 +15,7 @@
  */
 package de.caluga.morphium.quarkus;
 
+import de.caluga.morphium.EntityRegistry;
 import io.quarkus.runtime.annotations.Recorder;
 
 import java.util.Collections;
@@ -25,8 +26,8 @@ import java.util.List;
  *
  * <p>Stores the list of {@code @Entity} class names discovered at build time
  * so that {@link MorphiumProducer} can call {@code ensureIndicesFor()} at
- * runtime. This is necessary because Morphium's built-in ClassGraph scan
- * does not work with Quarkus's classloader.
+ * runtime, and pre-registers them with Morphium's {@link EntityRegistry}
+ * so that ClassGraph scanning is never needed at runtime.
  */
 @Recorder
 public class MorphiumRecorder {
@@ -35,6 +36,11 @@ public class MorphiumRecorder {
 
     public void setEntityClassNames(List<String> classNames) {
         entityClassNames = classNames == null ? Collections.emptyList() : List.copyOf(classNames);
+        // Pre-register with Morphium's EntityRegistry so ClassGraph is never invoked at runtime.
+        // This makes ClassGraph truly optional when running under Quarkus.
+        if (!entityClassNames.isEmpty()) {
+            EntityRegistry.preRegisterEntityNames(entityClassNames);
+        }
     }
 
     static List<String> getEntityClassNames() {

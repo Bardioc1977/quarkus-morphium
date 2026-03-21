@@ -18,20 +18,21 @@ package de.caluga.morphium.quarkus.deployment;
 import de.caluga.morphium.annotations.Embedded;
 import de.caluga.morphium.annotations.Entity;
 import de.caluga.morphium.quarkus.MorphiumRecorder;
-import io.github.classgraph.ClassGraph;
-import io.github.classgraph.ClassInfo;
-import io.github.classgraph.ScanResult;
 import io.quarkus.arc.deployment.AdditionalBeanBuildItem;
 import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
 import io.quarkus.deployment.annotations.ExecutionTime;
 import io.quarkus.deployment.annotations.Record;
+import io.quarkus.deployment.builditem.CombinedIndexBuildItem;
 import io.quarkus.deployment.builditem.FeatureBuildItem;
 import io.quarkus.deployment.builditem.nativeimage.ReflectiveClassBuildItem;
 import io.quarkus.smallrye.health.deployment.spi.HealthBuildItem;
 import de.caluga.morphium.quarkus.MorphiumBlockingCallDetector;
 import de.caluga.morphium.quarkus.MorphiumProducer;
 import de.caluga.morphium.quarkus.transaction.MorphiumTransactionalInterceptor;
+import org.jboss.jandex.AnnotationInstance;
+import org.jboss.jandex.DotName;
+import org.jboss.jandex.IndexView;
 import org.jboss.logging.Logger;
 
 import java.util.ArrayList;
@@ -116,32 +117,36 @@ public class MorphiumProcessor {
     @BuildStep
     @Record(ExecutionTime.RUNTIME_INIT)
     void registerEntitiesForReflection(BuildProducer<ReflectiveClassBuildItem> reflectiveClasses,
+                                       CombinedIndexBuildItem combinedIndex,
                                        MorphiumRecorder recorder) {
         List<String> entityClassNames = new ArrayList<>();
+        IndexView index = combinedIndex.getIndex();
 
-        try (ScanResult scan = new ClassGraph()
-                .enableClassInfo()
-                .enableAnnotationInfo()
-                .scan()) {
+        DotName entityDotName = DotName.createSimple(Entity.class.getName());
+        DotName embeddedDotName = DotName.createSimple(Embedded.class.getName());
 
-            for (ClassInfo ci : scan.getClassesWithAnnotation(Entity.class.getName())) {
-                registerClass(ci.getName(), reflectiveClasses);
-                entityClassNames.add(ci.getName());
+        for (AnnotationInstance ai : index.getAnnotations(entityDotName)) {
+            if (ai.target().kind() == org.jboss.jandex.AnnotationTarget.Kind.CLASS) {
+                String className = ai.target().asClass().name().toString();
+                registerClass(className, reflectiveClasses);
+                entityClassNames.add(className);
             }
-            for (ClassInfo ci : scan.getClassesWithAnnotation(Embedded.class.getName())) {
-                registerClass(ci.getName(), reflectiveClasses);
+        }
+        for (AnnotationInstance ai : index.getAnnotations(embeddedDotName)) {
+            if (ai.target().kind() == org.jboss.jandex.AnnotationTarget.Kind.CLASS) {
+                String className = ai.target().asClass().name().toString();
+                registerClass(className, reflectiveClasses);
+                // @Embedded classes are also pre-registered for typeId mapping
+                entityClassNames.add(className);
             }
-        } catch (Exception e) {
-            log.warn("Morphium: classpath scan for @Entity / @Embedded failed – "
-                + "native image may require manual reflect-config.json entries", e);
         }
 
-        // Pass discovered @Entity classes to runtime so MorphiumProducer can
-        // call ensureIndicesFor() — Morphium's built-in ClassGraph scan does
-        // not work with Quarkus's classloader.
+        // Pass discovered @Entity/@Embedded classes to runtime so MorphiumProducer can
+        // call ensureIndicesFor() and pre-register them with EntityRegistry —
+        // this makes ClassGraph completely optional at runtime under Quarkus.
         // Always call setEntityClassNames (even when empty) to reset state on hot reload.
         if (!entityClassNames.isEmpty()) {
-            log.infof("Morphium: passing %d @Entity classes for runtime index creation", entityClassNames.size());
+            log.infof("Morphium: passing %d @Entity/@Embedded classes for runtime pre-registration", entityClassNames.size());
         }
         recorder.setEntityClassNames(entityClassNames);
     }

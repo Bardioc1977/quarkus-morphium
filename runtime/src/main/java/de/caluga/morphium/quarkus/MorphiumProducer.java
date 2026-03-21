@@ -15,6 +15,8 @@
  */
 package de.caluga.morphium.quarkus;
 
+import de.caluga.morphium.AnnotationAndReflectionHelper;
+import de.caluga.morphium.EntityRegistry;
 import de.caluga.morphium.Morphium;
 import de.caluga.morphium.MorphiumConfig;
 import de.caluga.morphium.ObjectMapperImpl;
@@ -125,11 +127,18 @@ public class MorphiumProducer {
     }
 
     private Morphium buildMorphium() {
-        // Clear the static entity-class cache so ClassGraph re-scans with the current
-        // ClassLoader. Required in Quarkus dev mode where hot-reload replaces the
-        // QuarkusClassLoader – without this, stale class references from the previous
-        // loader cause ObjectMapperImpl to silently skip all @Entity classes.
+        // Clear static caches and re-register entities for the current ClassLoader.
+        // Required in Quarkus dev mode where hot-reload replaces the QuarkusClassLoader —
+        // without this, stale class references from the previous loader cause
+        // ObjectMapperImpl/AnnotationAndReflectionHelper to silently skip all @Entity classes.
+        EntityRegistry.clear();
         ObjectMapperImpl.clearEntityCache();
+        AnnotationAndReflectionHelper.clearTypeIdCache();
+        // Re-register from the build-time discovered list (forces resolution via current ClassLoader)
+        var entityNames = MorphiumRecorder.getEntityClassNames();
+        if (!entityNames.isEmpty()) {
+            EntityRegistry.preRegisterEntityNames(entityNames);
+        }
 
         MorphiumConfig cfg = new MorphiumConfig();
 
