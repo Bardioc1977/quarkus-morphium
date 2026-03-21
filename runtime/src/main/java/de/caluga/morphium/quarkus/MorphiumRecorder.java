@@ -32,15 +32,15 @@ import java.util.List;
 @Recorder
 public class MorphiumRecorder {
 
-    private static volatile List<String> entityClassNames = Collections.emptyList();
+    private static volatile List<String> mappedClassNames = Collections.emptyList();
 
-    public void setEntityClassNames(List<String> classNames) {
-        entityClassNames = classNames == null ? Collections.emptyList() : List.copyOf(classNames);
+    public void setMappedClassNames(List<String> classNames) {
+        mappedClassNames = classNames == null ? Collections.emptyList() : List.copyOf(classNames);
         // Actual EntityRegistry pre-registration happens in MorphiumProducer.buildMorphium()
         // so that dev-mode hot-reload (clear + re-register) works correctly.
     }
 
-    static List<String> getEntityClassNames() {
-        return entityClassNames;
+    static List<String> getMappedClassNames() {
+        return mappedClassNames;
     }
 }

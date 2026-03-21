@@ -135,7 +135,7 @@ public class MorphiumProducer {
         EntityRegistry.clear();
         ObjectMapperImpl.clearEntityCache();
         AnnotationAndReflectionHelper.clearTypeIdCache();
-        var entityNames = MorphiumRecorder.getEntityClassNames();
+        var entityNames = MorphiumRecorder.getMappedClassNames();
         if (!entityNames.isEmpty()) {
             EntityRegistry.preRegisterEntityNames(entityNames);
         }
@@ -276,7 +276,7 @@ public class MorphiumProducer {
     }
 
     private void ensureIndices(Morphium m) {
-        for (String className : MorphiumRecorder.getEntityClassNames()) {
+        for (String className : MorphiumRecorder.getMappedClassNames()) {
             try {
                 Class<?> entityClass = Thread.currentThread().getContextClassLoader().loadClass(className);
                 m.ensureIndicesFor(entityClass);

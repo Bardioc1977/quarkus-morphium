@@ -151,11 +151,11 @@ public class MorphiumProcessor {
         // Pass discovered @Entity/@Embedded classes to runtime for EntityRegistry pre-registration
         // and index creation. ensureIndicesFor() on @Embedded-only classes is a harmless no-op
         // (Morphium skips classes without @Entity for index creation).
-        // Always call setEntityClassNames (even when empty) to reset state on hot reload.
+        // Always call setMappedClassNames (even when empty) to reset state on hot reload.
         if (!allClassNames.isEmpty()) {
             log.infof("Morphium: passing %d @Entity/@Embedded classes for runtime pre-registration", allClassNames.size());
         }
-        recorder.setEntityClassNames(new ArrayList<>(allClassNames));
+        recorder.setMappedClassNames(new ArrayList<>(allClassNames));
     }
 
     private void registerClass(String className,
