@@ -282,9 +282,9 @@ public class MorphiumProducer {
                 m.ensureIndicesFor(entityClass);
                 log.debug("Ensured indexes for {}", className);
             } catch (ClassNotFoundException e) {
-                log.warn("Could not load entity class for index creation: {}", className);
+                log.warn("Could not load mapped class for index creation: {}", className);
             } catch (Exception e) {
-                log.warn("Failed to ensure indexes for {}: {}", className, e.getMessage(), e);
+                log.warn("Failed to ensure indexes for mapped class {}: {}", className, e.getMessage(), e);
             }
         }
     }
