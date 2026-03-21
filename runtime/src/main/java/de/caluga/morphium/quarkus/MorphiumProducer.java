@@ -15,6 +15,8 @@
  */
 package de.caluga.morphium.quarkus;
 
+import de.caluga.morphium.AnnotationAndReflectionHelper;
+import de.caluga.morphium.EntityRegistry;
 import de.caluga.morphium.Morphium;
 import de.caluga.morphium.MorphiumConfig;
 import de.caluga.morphium.ObjectMapperImpl;
@@ -125,11 +127,18 @@ public class MorphiumProducer {
     }
 
     private Morphium buildMorphium() {
-        // Clear the static entity-class cache so ClassGraph re-scans with the current
-        // ClassLoader. Required in Quarkus dev mode where hot-reload replaces the
-        // QuarkusClassLoader – without this, stale class references from the previous
-        // loader cause ObjectMapperImpl to silently skip all @Entity classes.
+        // Clear static caches and re-register entities for the current ClassLoader.
+        // This is essential for Quarkus dev-mode hot-reload where the QuarkusClassLoader
+        // is replaced — without this, stale class references from the previous loader cause
+        // ObjectMapperImpl/AnnotationAndReflectionHelper to silently skip all @Entity classes.
+        // In production mode this is a harmless one-time init (clear of empty state + register).
+        EntityRegistry.clear();
         ObjectMapperImpl.clearEntityCache();
+        AnnotationAndReflectionHelper.clearTypeIdCache();
+        var entityNames = MorphiumRecorder.getMappedClassNames();
+        if (!entityNames.isEmpty()) {
+            EntityRegistry.preRegisterEntityNames(entityNames);
+        }
 
         MorphiumConfig cfg = new MorphiumConfig();
 
@@ -267,15 +276,15 @@ public class MorphiumProducer {
     }
 
     private void ensureIndices(Morphium m) {
-        for (String className : MorphiumRecorder.getEntityClassNames()) {
+        for (String className : MorphiumRecorder.getMappedClassNames()) {
             try {
                 Class<?> entityClass = Thread.currentThread().getContextClassLoader().loadClass(className);
                 m.ensureIndicesFor(entityClass);
                 log.debug("Ensured indexes for {}", className);
             } catch (ClassNotFoundException e) {
-                log.warn("Could not load entity class for index creation: {}", className);
+                log.warn("Could not load mapped class for index creation: {}", className);
             } catch (Exception e) {
-                log.warn("Failed to ensure indexes for {}: {}", className, e.getMessage(), e);
+                log.warn("Failed to ensure indexes for mapped class {}: {}", className, e.getMessage(), e);
             }
         }
     }

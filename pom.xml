@@ -64,7 +64,9 @@
     <maven.compiler.release>21</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <quarkus.version>3.32.3</quarkus.version>
-    <morphium.version>6.2.1</morphium.version>
+    <!-- SNAPSHOT: requires local `mvn install` of morphium or a snapshot repository.
+         Will be bumped to a release version once morphium 6.2.2 is published. -->
+    <morphium.version>6.2.2-SNAPSHOT</morphium.version>
     <jakarta.data.version>1.0.0</jakarta.data.version>
   </properties>
 

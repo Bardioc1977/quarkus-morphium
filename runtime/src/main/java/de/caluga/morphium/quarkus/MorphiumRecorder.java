@@ -23,21 +23,24 @@ import java.util.List;
 /**
  * Quarkus {@link Recorder} for the Morphium extension.
  *
- * <p>Stores the list of {@code @Entity} class names discovered at build time
- * so that {@link MorphiumProducer} can call {@code ensureIndicesFor()} at
- * runtime. This is necessary because Morphium's built-in ClassGraph scan
- * does not work with Quarkus's classloader.
+ * <p>Stores the list of {@code @Entity} and {@code @Embedded} class names
+ * discovered at build time so that {@link MorphiumProducer} can clear caches
+ * and pre-register them with Morphium's {@code EntityRegistry} when the
+ * {@code Morphium} instance is created. This avoids ClassGraph at runtime
+ * and handles dev-mode hot-reload.
  */
 @Recorder
 public class MorphiumRecorder {
 
-    private static volatile List<String> entityClassNames = Collections.emptyList();
+    private static volatile List<String> mappedClassNames = Collections.emptyList();
 
-    public void setEntityClassNames(List<String> classNames) {
-        entityClassNames = classNames == null ? Collections.emptyList() : List.copyOf(classNames);
+    public void setMappedClassNames(List<String> classNames) {
+        mappedClassNames = classNames == null ? Collections.emptyList() : List.copyOf(classNames);
+        // Actual EntityRegistry pre-registration happens in MorphiumProducer.buildMorphium()
+        // so that dev-mode hot-reload (clear + re-register) works correctly.
     }
 
-    static List<String> getEntityClassNames() {
-        return entityClassNames;
+    static List<String> getMappedClassNames() {
+        return mappedClassNames;
     }
 }
