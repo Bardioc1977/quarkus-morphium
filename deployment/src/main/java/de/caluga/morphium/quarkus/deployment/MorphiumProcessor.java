@@ -37,7 +37,6 @@ import org.jboss.logging.Logger;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Set;
 
 /**
@@ -54,6 +53,11 @@ import java.util.Set;
  *
  * <p>This class uses only standard Quarkus build-item APIs and Jandex for
  * annotation scanning – no {@code sun.*} imports, no {@code Unsafe} access.
+ *
+ * <p><b>Note:</b> Jandex only discovers {@code @Entity}/{@code @Embedded} classes in
+ * the application and in dependencies that provide a Jandex index. For entities in
+ * external (unindexed) JARs, add {@code quarkus.index-dependency} entries in
+ * {@code application.properties} or use the {@code jandex-maven-plugin}.
  */
 public class MorphiumProcessor {
 
