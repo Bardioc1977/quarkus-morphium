@@ -36,7 +36,9 @@ import org.jboss.jandex.IndexView;
 import org.jboss.logging.Logger;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Quarkus build-time processor for the Morphium extension.
@@ -50,8 +52,8 @@ import java.util.List;
  *       deserialise them in a native image without requiring {@code reflect-config.json}.</li>
  * </ol>
  *
- * <p>This class uses only standard Quarkus build-item APIs and ClassGraph for
- * classpath scanning – no {@code sun.*} imports, no {@code Unsafe} access.
+ * <p>This class uses only standard Quarkus build-item APIs and Jandex for
+ * annotation scanning – no {@code sun.*} imports, no {@code Unsafe} access.
  */
 public class MorphiumProcessor {
 
@@ -119,7 +121,8 @@ public class MorphiumProcessor {
     void registerEntitiesForReflection(BuildProducer<ReflectiveClassBuildItem> reflectiveClasses,
                                        CombinedIndexBuildItem combinedIndex,
                                        MorphiumRecorder recorder) {
-        List<String> entityClassNames = new ArrayList<>();
+        // Use a Set to avoid duplicates (a class could theoretically have both annotations)
+        Set<String> allClassNames = new LinkedHashSet<>();
         IndexView index = combinedIndex.getIndex();
 
         DotName entityDotName = DotName.createSimple(Entity.class.getName());
@@ -129,26 +132,26 @@ public class MorphiumProcessor {
             if (ai.target().kind() == org.jboss.jandex.AnnotationTarget.Kind.CLASS) {
                 String className = ai.target().asClass().name().toString();
                 registerClass(className, reflectiveClasses);
-                entityClassNames.add(className);
+                allClassNames.add(className);
             }
         }
         for (AnnotationInstance ai : index.getAnnotations(embeddedDotName)) {
             if (ai.target().kind() == org.jboss.jandex.AnnotationTarget.Kind.CLASS) {
                 String className = ai.target().asClass().name().toString();
                 registerClass(className, reflectiveClasses);
-                // @Embedded classes are also pre-registered for typeId mapping
-                entityClassNames.add(className);
+                // @Embedded classes need pre-registration for typeId mapping
+                allClassNames.add(className);
             }
         }
 
-        // Pass discovered @Entity/@Embedded classes to runtime so MorphiumProducer can
-        // call ensureIndicesFor() and pre-register them with EntityRegistry —
-        // this makes ClassGraph completely optional at runtime under Quarkus.
+        // Pass discovered @Entity/@Embedded classes to runtime for EntityRegistry pre-registration
+        // and index creation. ensureIndicesFor() on @Embedded-only classes is a harmless no-op
+        // (Morphium skips classes without @Entity for index creation).
         // Always call setEntityClassNames (even when empty) to reset state on hot reload.
-        if (!entityClassNames.isEmpty()) {
-            log.infof("Morphium: passing %d @Entity/@Embedded classes for runtime pre-registration", entityClassNames.size());
+        if (!allClassNames.isEmpty()) {
+            log.infof("Morphium: passing %d @Entity/@Embedded classes for runtime pre-registration", allClassNames.size());
         }
-        recorder.setEntityClassNames(entityClassNames);
+        recorder.setEntityClassNames(new ArrayList<>(allClassNames));
     }
 
     private void registerClass(String className,
