@@ -29,5 +29,13 @@
       <groupId>io.quarkus</groupId>
       <artifactId>quarkus-junit</artifactId>
     </dependency>
+    <!-- Morphium declares classgraph as optional. When Mockito/ByteBuddy
+         instruments MorphiumBase for mocking, classgraph must be on the
+         classpath, otherwise tests fail with NoClassDefFoundError. -->
+    <dependency>
+      <groupId>io.github.classgraph</groupId>
+      <artifactId>classgraph</artifactId>
+      <version>4.8.184</version>
+    </dependency>
   </dependencies>
 </project>
