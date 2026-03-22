@@ -35,22 +35,17 @@ needed.
 | Database name injected into `quarkus.morphium.database`.
 
 | `quarkus.morphium.devservices.replica-set`
-| `false`
-| Start MongoDB as a single-node replica set instead of standalone. Enables multi-document transactions.
+| `true`
+| Start MongoDB as a single-node replica set. Enables multi-document transactions, change streams, and other oplog-dependent features.
 |===
 
 == Replica-Set Mode
 
-By default, Dev Services starts MongoDB in standalone mode. Standalone MongoDB does *not*
-support multi-document transactions. If your application uses `@MorphiumTransactional` or
-calls the Morphium transaction API directly, enable replica-set mode:
+By default, Dev Services starts MongoDB as a single-node replica set — matching the default
+behavior of MongoDB 8+. This enables multi-document transactions, change streams, and
+`@MorphiumTransactional` out of the box.
 
-[source,properties]
-----
-quarkus.morphium.devservices.replica-set=true
-----
-
-When enabled, the extension uses Testcontainers' `MongoDBContainer` which automatically:
+The extension uses Testcontainers' `MongoDBContainer` which automatically:
 
 * Starts MongoDB with `--replSet`
 * Executes `rs.initiate()`

@@ -66,9 +66,9 @@ class MorphiumDevServicesConfigDefaultsTest {
     }
 
     @Test
-    @DisplayName("replicaSet() defaults to false")
-    void replicaSet_defaultsToFalse() {
-        assertThat(defaults.replicaSet()).isFalse();
+    @DisplayName("replicaSet() defaults to true")
+    void replicaSet_defaultsToTrue() {
+        assertThat(defaults.replicaSet()).isTrue();
     }
 
     // -------------------------------------------------------------------------
@@ -76,15 +76,15 @@ class MorphiumDevServicesConfigDefaultsTest {
     // -------------------------------------------------------------------------
 
     @Test
-    @DisplayName("replica-set property maps to replicaSet() and accepts 'true'")
-    void replicaSet_canBeEnabledViaProperty() {
+    @DisplayName("replica-set property maps to replicaSet() and accepts 'false'")
+    void replicaSet_canBeDisabledViaProperty() {
         SmallRyeConfig sr = new SmallRyeConfigBuilder()
                 .withMapping(MorphiumDevServicesBuildTimeConfig.class)
-                .withDefaultValue("quarkus.morphium.devservices.replica-set", "true")
+                .withDefaultValue("quarkus.morphium.devservices.replica-set", "false")
                 .build();
         MorphiumDevServicesBuildTimeConfig cfg =
                 sr.getConfigMapping(MorphiumDevServicesBuildTimeConfig.class);
-        assertThat(cfg.replicaSet()).isTrue();
+        assertThat(cfg.replicaSet()).isFalse();
     }
 
     @Test
@@ -124,14 +124,14 @@ class MorphiumDevServicesConfigDefaultsTest {
     }
 
     @Test
-    @DisplayName("replica-set=false is idempotent (same as default)")
-    void replicaSet_falseIsIdempotent() {
+    @DisplayName("replica-set=true is idempotent (same as default)")
+    void replicaSet_trueIsIdempotent() {
         SmallRyeConfig sr = new SmallRyeConfigBuilder()
                 .withMapping(MorphiumDevServicesBuildTimeConfig.class)
-                .withDefaultValue("quarkus.morphium.devservices.replica-set", "false")
+                .withDefaultValue("quarkus.morphium.devservices.replica-set", "true")
                 .build();
         MorphiumDevServicesBuildTimeConfig cfg =
                 sr.getConfigMapping(MorphiumDevServicesBuildTimeConfig.class);
-        assertThat(cfg.replicaSet()).isFalse();
+        assertThat(cfg.replicaSet()).isTrue();
     }
 }

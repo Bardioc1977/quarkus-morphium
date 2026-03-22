@@ -13,14 +13,8 @@ exception it is rolled back and the exception is re-thrown.
 MongoDB multi-document transactions require a *replica set* (or sharded cluster). A
 standalone MongoDB instance does not support transactions.
 
-In dev/test mode, enable the single-node replica set in Dev Services:
-
-[source,properties]
-----
-quarkus.morphium.devservices.replica-set=true
-----
-
-See xref:dev-services.adoc[Dev Services] for details.
+Dev Services starts MongoDB as a single-node replica set by default, so transactions work
+out of the box. See xref:dev-services.adoc[Dev Services] for details.
 ====
 
 == @MorphiumTransactional
@@ -139,14 +133,8 @@ at the document level, but multi-document rollback is unavailable.
 
 == Testing Transactions
 
-To test `@MorphiumTransactional` methods, you need a replica set. Configure Dev Services
-accordingly:
-
-[source,properties]
-----
-# src/test/resources/application.properties
-%test.quarkus.morphium.devservices.replica-set=true
-----
+To test `@MorphiumTransactional` methods, you need a replica set. Dev Services starts one
+by default, so no extra configuration is needed:
 
 [source,java]
 ----
@@ -179,5 +167,5 @@ class OrderServiceTest {
 ----
 
 NOTE: The `InMemDriver` does not support true multi-document transactions. Use Dev Services
-with `replica-set=true` for transaction testing. See xref:testing.adoc[Testing] for more
-strategies.
+(replica set is enabled by default) for transaction testing. See xref:testing.adoc[Testing]
+for more strategies.

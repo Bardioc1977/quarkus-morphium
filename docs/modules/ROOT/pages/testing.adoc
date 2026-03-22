@@ -190,13 +190,8 @@ while retaining the collection and its indexes (faster when index creation is ex
 == Testing Transactions
 
 `@MorphiumTransactional` requires a replica set. The `InMemDriver` does not provide true
-multi-document atomicity, so transaction tests must use Dev Services with replica-set mode:
-
-[source,properties]
-----
-# src/test/resources/application.properties
-%test.quarkus.morphium.devservices.replica-set=true
-----
+multi-document atomicity, so transaction tests must use Dev Services (replica set is enabled
+by default — no extra configuration needed).
 
 [source,java]
 ----
@@ -292,7 +287,7 @@ link:{showcase-github-url}[quarkus-morphium-showcase] project.
 
 | Multi-document transactions
 | best-effort
-| No true atomicity — use Dev Services with `replica-set=true`
+| No true atomicity — use Dev Services (replica set enabled by default)
 
 | Change streams
 | no
