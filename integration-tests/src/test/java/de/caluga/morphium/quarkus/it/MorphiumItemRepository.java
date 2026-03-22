@@ -1,6 +1,6 @@
 package de.caluga.morphium.quarkus.it;
 
-import de.caluga.morphium.quarkus.data.MorphiumRepository;
+import de.caluga.morphium.data.MorphiumRepository;
 import jakarta.data.repository.Repository;
 
 import java.util.List;

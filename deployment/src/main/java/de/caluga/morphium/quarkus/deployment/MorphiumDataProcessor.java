@@ -1,12 +1,13 @@
 package de.caluga.morphium.quarkus.deployment;
 
-import de.caluga.morphium.quarkus.data.AbstractMorphiumRepository;
-import de.caluga.morphium.quarkus.data.FindMethodBridge;
-import de.caluga.morphium.quarkus.data.JdqlMethodBridge;
-import de.caluga.morphium.quarkus.data.MethodNameParser;
-import de.caluga.morphium.quarkus.data.QueryDescriptor;
-import de.caluga.morphium.quarkus.data.QueryMethodBridge;
-import de.caluga.morphium.quarkus.data.RepositoryMetadata;
+import de.caluga.morphium.data.AbstractMorphiumRepository;
+import de.caluga.morphium.data.FindMethodBridge;
+import de.caluga.morphium.data.JdqlMethodBridge;
+import de.caluga.morphium.data.MethodNameParser;
+import de.caluga.morphium.data.QueryDescriptor;
+import de.caluga.morphium.data.QueryMethodBridge;
+import de.caluga.morphium.data.RepositoryMetadata;
+import de.caluga.morphium.quarkus.data.QuarkusMorphiumRepository;
 import io.quarkus.arc.deployment.AdditionalBeanBuildItem;
 import io.quarkus.arc.deployment.GeneratedBeanBuildItem;
 import io.quarkus.arc.deployment.GeneratedBeanGizmoAdaptor;
@@ -63,7 +64,7 @@ public class MorphiumDataProcessor {
     private static final DotName CRUD_REPOSITORY = DotName.createSimple(
             "jakarta.data.repository.CrudRepository");
     private static final DotName MORPHIUM_REPOSITORY = DotName.createSimple(
-            "de.caluga.morphium.quarkus.data.MorphiumRepository");
+            "de.caluga.morphium.data.MorphiumRepository");
     private static final DotName ENTITY_ANNOTATION = DotName.createSimple(
             "de.caluga.morphium.annotations.Entity");
     private static final DotName ID_ANNOTATION = DotName.createSimple(
@@ -195,9 +196,9 @@ public class MorphiumDataProcessor {
                                  BuildProducer<AdditionalBeanBuildItem> additionalBeans) {
         if (repositories.isEmpty()) return;
 
-        // Register AbstractMorphiumRepository as a bean
+        // Register QuarkusMorphiumRepository as a bean
         additionalBeans.produce(AdditionalBeanBuildItem.builder()
-                .addBeanClass(AbstractMorphiumRepository.class)
+                .addBeanClass(QuarkusMorphiumRepository.class)
                 .setUnremovable()
                 .build());
 
@@ -406,7 +407,7 @@ public class MorphiumDataProcessor {
         boolean isCrud = isMorphium || implementsInterface(repoInterface, CRUD_REPOSITORY, index);
         boolean isBasic = isCrud || implementsInterface(repoInterface, BASIC_REPOSITORY, index);
 
-        String superClass = AbstractMorphiumRepository.class.getName();
+        String superClass = QuarkusMorphiumRepository.class.getName();
         String signature = buildGenericSignature(superClass, repo.getInterfaceName(),
                 entityClassName, idClassName);
 
@@ -489,7 +490,7 @@ public class MorphiumDataProcessor {
                     entityClass, idClass, idField);
 
             ctor.invokeSpecialMethod(
-                    MethodDescriptor.ofMethod(AbstractMorphiumRepository.class,
+                    MethodDescriptor.ofMethod(QuarkusMorphiumRepository.class,
                             "<init>", void.class, RepositoryMetadata.class),
                     ctor.getThis(), metadata);
 

@@ -68,6 +68,7 @@
          Will be bumped to a release version once morphium 6.2.2 is published. -->
     <morphium.version>6.2.2-SNAPSHOT</morphium.version>
     <jakarta.data.version>1.0.0</jakarta.data.version>
+    <morphium-jakarta-data.version>1.0.0-SNAPSHOT</morphium-jakarta-data.version>
   </properties>
 
   <dependencyManagement>
@@ -83,6 +84,11 @@
         <groupId>de.caluga</groupId>
         <artifactId>morphium</artifactId>
         <version>${morphium.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>de.caluga</groupId>
+        <artifactId>morphium-jakarta-data</artifactId>
+        <version>${morphium-jakarta-data.version}</version>
       </dependency>
       <dependency>
         <groupId>org.assertj</groupId>

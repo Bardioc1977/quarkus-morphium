@@ -37,6 +37,11 @@
       <artifactId>jakarta.data-api</artifactId>
       <version>${jakarta.data.version}</version>
     </dependency>
+    <!-- Shared Jakarta Data runtime for Morphium (query derivation, JDQL, pagination) -->
+    <dependency>
+      <groupId>de.caluga</groupId>
+      <artifactId>morphium-jakarta-data</artifactId>
+    </dependency>
     <!-- The Morphium ORM library -->
     <dependency>
       <groupId>de.caluga</groupId>
