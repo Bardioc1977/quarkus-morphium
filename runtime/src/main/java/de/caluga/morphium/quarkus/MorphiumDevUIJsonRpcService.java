@@ -42,7 +42,15 @@ public class MorphiumDevUIJsonRpcService {
             var config = morphium.getConfig();
             var driver = morphium.getDriver();
 
-            String hosts = String.join(", ", config.clusterSettings().getHostSeed());
+            var clusterSettings = config.clusterSettings();
+            var hostSeed = clusterSettings.getHostSeed();
+            String hosts;
+            if (hostSeed != null && !hostSeed.isEmpty()) {
+                hosts = String.join(", ", hostSeed);
+            } else {
+                String atlasUrl = clusterSettings.getAtlasUrl();
+                hosts = (atlasUrl != null && !atlasUrl.isBlank()) ? atlasUrl : "unknown";
+            }
             String database = config.connectionSettings().getDatabase();
             boolean isReplicaSet = driver.isReplicaSet();
             String mode = isReplicaSet ? "Replica Set (transactions enabled)" : "Standalone";

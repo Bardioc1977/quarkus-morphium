@@ -28,10 +28,20 @@ export class QwcMorphiumConnection extends LitElement {
 
     connectedCallback() {
         super.connectedCallback();
-        this.jsonRpc.getConnectionInfo().then(response => {
-            this._rows = response.result;
-            this._loading = false;
-        });
+        this.jsonRpc.getConnectionInfo()
+            .then(response => {
+                this._rows = Array.isArray(response?.result) ? response.result : [];
+            })
+            .catch(error => {
+                console.error('Failed to load connection info', error);
+                this._rows = [{
+                    Property: 'Status',
+                    Value: 'Unable to load connection info: ' + (error?.message ?? 'unknown error')
+                }];
+            })
+            .finally(() => {
+                this._loading = false;
+            });
     }
 
     render() {
@@ -39,7 +49,7 @@ export class QwcMorphiumConnection extends LitElement {
             return html`<span>Loading connection info...</span>`;
         }
         return html`
-            <vaadin-grid .items="${this._rows}" all-rows-visible theme="compact row-stripes no-border">
+            <vaadin-grid .items=${this._rows} all-rows-visible theme="compact row-stripes no-border">
                 <vaadin-grid-column path="Property" header="property"></vaadin-grid-column>
                 <vaadin-grid-column path="Value" header="value"></vaadin-grid-column>
             </vaadin-grid>`;
