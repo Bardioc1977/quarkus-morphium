@@ -16,7 +16,6 @@
 package de.caluga.morphium.quarkus.it;
 
 import de.caluga.morphium.AnnotationAndReflectionHelper;
-import de.caluga.morphium.EntityRegistry;
 import de.caluga.morphium.Morphium;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -28,49 +27,33 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Verifies that the Quarkus build-time entity discovery (Jandex scan in
  * {@code MorphiumProcessor}) correctly pre-registers {@code @Entity} and
- * {@code @Embedded} classes via {@link de.caluga.morphium.quarkus.MorphiumRecorder}
- * and {@link EntityRegistry}.
+ * {@code @Embedded} classes via {@code AnnotationAndReflectionHelper.registerTypeIds()}.
  *
- * <p>This is an explicit test for the ClassGraph-optional flow:
+ * <p>This is an explicit test for the pre-registration flow:
  * the Processor discovers entities at build time, the Recorder stores
- * class names, and the Producer pre-registers them with EntityRegistry.
+ * class names, and the Producer builds a typeId map and registers it.
  */
 @QuarkusTest
-@DisplayName("Build-time entity pre-registration (EntityRegistry)")
+@DisplayName("Build-time entity pre-registration (registerTypeIds)")
 class MorphiumEntityRegistryTest {
 
     @Inject
     Morphium morphium;
 
     @Test
-    @DisplayName("EntityRegistry has pre-registered entities after Morphium init")
-    void entityRegistry_hasPreRegisteredEntities() {
-        assertThat(EntityRegistry.hasPreRegisteredEntities()).isTrue();
+    @DisplayName("TypeId resolution works for pre-registered @Entity")
+    void typeIdResolution_worksForEntity() throws Exception {
+        AnnotationAndReflectionHelper arh = new AnnotationAndReflectionHelper(true);
+        Class<?> resolved = arh.getClassForTypeId(CustomerEntity.class.getName());
+        assertThat(resolved).isEqualTo(CustomerEntity.class);
     }
 
     @Test
-    @DisplayName("Pre-registered entities include @Entity classes from Jandex scan")
-    void preRegisteredEntities_containEntityClasses() {
-        assertThat(EntityRegistry.getPreRegisteredEntities())
-                .as("Pre-registered set should contain @Entity classes discovered by Jandex")
-                .contains(CustomerEntity.class, OrderEntity.class, ItemEntity.class);
-    }
-
-    @Test
-    @DisplayName("Pre-registered entities include @Embedded classes from Jandex scan")
-    void preRegisteredEntities_containEmbeddedClasses() {
-        assertThat(EntityRegistry.getPreRegisteredEntities())
-                .as("Pre-registered set should contain @Embedded classes discovered by Jandex")
-                .contains(AddressEmbedded.class);
-    }
-
-    @Test
-    @DisplayName("Pre-registered typeIds map contains FQCN entries")
-    void preRegisteredTypeIds_containFqcnEntries() {
-        assertThat(EntityRegistry.getPreRegisteredTypeIds())
-                .as("TypeId map should contain FQCN→FQCN mappings for discovered entities")
-                .containsKey(CustomerEntity.class.getName())
-                .containsKey(AddressEmbedded.class.getName());
+    @DisplayName("TypeId resolution works for pre-registered @Embedded")
+    void typeIdResolution_worksForEmbedded() throws Exception {
+        AnnotationAndReflectionHelper arh = new AnnotationAndReflectionHelper(true);
+        Class<?> resolved = arh.getClassForTypeId(AddressEmbedded.class.getName());
+        assertThat(resolved).isEqualTo(AddressEmbedded.class);
     }
 
     @Test
@@ -88,10 +71,10 @@ class MorphiumEntityRegistryTest {
     }
 
     @Test
-    @DisplayName("TypeId resolution works for pre-registered @Entity")
-    void typeIdResolution_worksForEntity() throws Exception {
+    @DisplayName("TypeId for OrderEntity resolves correctly")
+    void typeIdResolution_worksForOrderEntity() throws Exception {
         AnnotationAndReflectionHelper arh = new AnnotationAndReflectionHelper(true);
-        Class<?> resolved = arh.getClassForTypeId(CustomerEntity.class.getName());
-        assertThat(resolved).isEqualTo(CustomerEntity.class);
+        Class<?> resolved = arh.getClassForTypeId(OrderEntity.class.getName());
+        assertThat(resolved).isEqualTo(OrderEntity.class);
     }
 }

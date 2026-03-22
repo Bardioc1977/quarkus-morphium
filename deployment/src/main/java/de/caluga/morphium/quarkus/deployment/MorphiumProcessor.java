@@ -148,7 +148,7 @@ public class MorphiumProcessor {
             }
         }
 
-        // Pass discovered @Entity/@Embedded classes to runtime for EntityRegistry pre-registration
+        // Pass discovered @Entity/@Embedded classes to runtime for registerTypeIds() pre-registration
         // and index creation. ensureIndicesFor() on @Embedded-only classes is a harmless no-op
         // (Morphium skips classes without @Entity for index creation).
         // Always call setMappedClassNames (even when empty) to reset state on hot reload.

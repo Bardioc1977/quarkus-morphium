@@ -25,9 +25,9 @@ import java.util.List;
  *
  * <p>Stores the list of {@code @Entity} and {@code @Embedded} class names
  * discovered at build time so that {@link MorphiumProducer} can clear caches
- * and pre-register them with Morphium's {@code EntityRegistry} when the
- * {@code Morphium} instance is created. This avoids ClassGraph at runtime
- * and handles dev-mode hot-reload.
+ * and pre-register them via {@code AnnotationAndReflectionHelper.registerTypeIds()}
+ * when the {@code Morphium} instance is created. This skips the ClassGraph scan
+ * at runtime and handles dev-mode hot-reload.
  */
 @Recorder
 public class MorphiumRecorder {
@@ -36,7 +36,7 @@ public class MorphiumRecorder {
 
     public void setMappedClassNames(List<String> classNames) {
         mappedClassNames = classNames == null ? Collections.emptyList() : List.copyOf(classNames);
-        // Actual EntityRegistry pre-registration happens in MorphiumProducer.buildMorphium()
+        // Actual registerTypeIds() call happens in MorphiumProducer.buildMorphium()
         // so that dev-mode hot-reload (clear + re-register) works correctly.
     }
 

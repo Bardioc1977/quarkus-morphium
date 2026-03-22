@@ -16,14 +16,17 @@
 package de.caluga.morphium.quarkus;
 
 import de.caluga.morphium.AnnotationAndReflectionHelper;
-import de.caluga.morphium.EntityRegistry;
 import de.caluga.morphium.Morphium;
 import de.caluga.morphium.MorphiumConfig;
 import de.caluga.morphium.ObjectMapperImpl;
+import de.caluga.morphium.annotations.Embedded;
+import de.caluga.morphium.annotations.Entity;
 import de.caluga.morphium.config.CollectionCheckSettings;
 import de.caluga.morphium.driver.wire.SslHelper;
 import de.caluga.morphium.objectmapping.LocalDateTimeMapper;
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
 import io.quarkus.runtime.ShutdownEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
@@ -127,17 +130,16 @@ public class MorphiumProducer {
     }
 
     private Morphium buildMorphium() {
-        // Clear static caches and re-register entities for the current ClassLoader.
+        // Clear static caches and pre-register entities for the current ClassLoader.
         // This is essential for Quarkus dev-mode hot-reload where the QuarkusClassLoader
         // is replaced — without this, stale class references from the previous loader cause
         // ObjectMapperImpl/AnnotationAndReflectionHelper to silently skip all @Entity classes.
         // In production mode this is a harmless one-time init (clear of empty state + register).
-        EntityRegistry.clear();
         ObjectMapperImpl.clearEntityCache();
         AnnotationAndReflectionHelper.clearTypeIdCache();
         var entityNames = MorphiumRecorder.getMappedClassNames();
         if (!entityNames.isEmpty()) {
-            EntityRegistry.preRegisterEntityNames(entityNames);
+            AnnotationAndReflectionHelper.registerTypeIds(buildTypeIdMap(entityNames));
         }
 
         MorphiumConfig cfg = new MorphiumConfig();
@@ -147,7 +149,7 @@ public class MorphiumProducer {
         cfg.connectionSettings().setMaxConnections(config.maxConnections());
         cfg.driverSettings().setDefaultReadPreferenceType(config.readPreference());
 
-        // Morphium's internal checkIndices() uses ClassGraph or EntityRegistry at startup.
+        // Morphium's internal checkIndices() uses ClassGraph at startup.
         // In Quarkus, we handle index creation explicitly via ensureIndices() using the
         // build-time discovered entity list — so always disable Morphium's internal check
         // to avoid redundant index creation (Morphium + Producer would both call ensureIndicesFor).
@@ -278,6 +280,37 @@ public class MorphiumProducer {
             t = t.getCause();
         }
         return false;
+    }
+
+    /**
+     * Builds a typeId→FQCN map from the entity class names discovered at build time.
+     * Loads each class, reads its @Entity/@Embedded annotation, and extracts the typeId.
+     */
+    private Map<String, String> buildTypeIdMap(java.util.List<String> classNames) {
+        Map<String, String> typeIds = new HashMap<>();
+        ClassLoader cl = Thread.currentThread().getContextClassLoader();
+        for (String cn : classNames) {
+            try {
+                Class<?> cls = Class.forName(cn, false, cl);
+                Entity entity = cls.getAnnotation(Entity.class);
+                if (entity != null) {
+                    if (!".".equals(entity.typeId())) {
+                        typeIds.put(entity.typeId(), cn);
+                    }
+                    typeIds.put(cn, cn);
+                }
+                Embedded embedded = cls.getAnnotation(Embedded.class);
+                if (embedded != null) {
+                    if (!".".equals(embedded.typeId())) {
+                        typeIds.put(embedded.typeId(), cn);
+                    }
+                    typeIds.put(cn, cn);
+                }
+            } catch (ClassNotFoundException e) {
+                log.warn("Could not load entity class for type ID registration: {}", cn);
+            }
+        }
+        return typeIds;
     }
 
     private void ensureIndices(Morphium m) {
