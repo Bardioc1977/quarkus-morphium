@@ -147,10 +147,15 @@ public class MorphiumProducer {
         cfg.connectionSettings().setMaxConnections(config.maxConnections());
         cfg.driverSettings().setDefaultReadPreferenceType(config.readPreference());
 
-        // Map the quarkus.morphium.index-check enum to Morphium's CollectionCheckSettings
+        // Morphium's internal checkIndices() uses ClassGraph or EntityRegistry at startup.
+        // In Quarkus, we handle index creation explicitly via ensureIndices() using the
+        // build-time discovered entity list — so always disable Morphium's internal check
+        // to avoid redundant index creation (Morphium + Producer would both call ensureIndicesFor).
+        // WARN_ON_STARTUP is harmless and does not create indices, so we allow it through.
         switch (config.indexCheck()) {
             case CREATE_ON_STARTUP:
-                cfg.collectionCheckSettings().setIndexCheck(CollectionCheckSettings.IndexCheck.CREATE_ON_STARTUP);
+                // Disable Morphium-internal creation — Producer.ensureIndices() handles it
+                cfg.collectionCheckSettings().setIndexCheck(CollectionCheckSettings.IndexCheck.NO_CHECK);
                 break;
             case WARN_ON_STARTUP:
                 cfg.collectionCheckSettings().setIndexCheck(CollectionCheckSettings.IndexCheck.WARN_ON_STARTUP);
