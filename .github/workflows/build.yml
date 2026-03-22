@@ -51,6 +51,12 @@ jobs:
       - name: Install Morphium
         run: mvn -B install -DskipTests -f morphium-src/pom.xml
 
+      - name: Checkout and install morphium-jakarta-data
+        run: |
+          git clone --depth 1 https://github.com/Bardioc1977/morphium-jakarta-data.git /tmp/morphium-jakarta-data
+          cd /tmp/morphium-jakarta-data
+          mvn -B install -DskipTests
+
       - name: Build and test
         run: mvn -B verify
 
