@@ -61,9 +61,9 @@ public interface MorphiumDevServicesBuildTimeConfig {
     /**
      * Whether to start MongoDB as a single-node replica set instead of a standalone instance.
      *
-     * <p>Defaults to {@code true} because MongoDB 8+ (the default Dev Services image)
-     * runs as a replica set by default. A replica set enables multi-document transactions,
-     * change streams, and other features that require an oplog.
+     * <p>Defaults to {@code true} so that multi-document transactions, change streams,
+     * and other oplog-dependent features work out of the box. The extension achieves this
+     * by calling Testcontainers' {@code MongoDBContainer.withReplicaSet()}.
      *
      * <p>Set to {@code false} only if you explicitly need a standalone MongoDB (e.g. with
      * an older image like {@code mongo:6}).

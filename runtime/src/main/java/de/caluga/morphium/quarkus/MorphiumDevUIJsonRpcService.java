@@ -18,6 +18,7 @@ package de.caluga.morphium.quarkus;
 import de.caluga.morphium.Morphium;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import org.jboss.logging.Logger;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -32,6 +33,8 @@ import java.util.Map;
  */
 @Singleton
 public class MorphiumDevUIJsonRpcService {
+
+    private static final Logger log = Logger.getLogger(MorphiumDevUIJsonRpcService.class);
 
     @Inject
     Morphium morphium;
@@ -49,22 +52,34 @@ public class MorphiumDevUIJsonRpcService {
                 hosts = String.join(", ", hostSeed);
             } else {
                 String atlasUrl = clusterSettings.getAtlasUrl();
-                hosts = (atlasUrl != null && !atlasUrl.isBlank()) ? atlasUrl : "unknown";
+                hosts = (atlasUrl != null && !atlasUrl.isBlank()) ? sanitizeUri(atlasUrl) : "unknown";
             }
             String database = config.connectionSettings().getDatabase();
             boolean isReplicaSet = driver.isReplicaSet();
             String mode = isReplicaSet ? "Replica Set (transactions enabled)" : "Standalone";
-            String driverName = config.driverSettings().getDriverName();
+            String driverName = driver.getClass().getSimpleName();
+            String status = (driver.isConnected()) ? "Connected" : "Disconnected";
 
             rows.add(row("Hosts", hosts));
             rows.add(row("Database", database));
             rows.add(row("Mode", mode));
             rows.add(row("Driver", driverName));
-            rows.add(row("Status", "Connected"));
+            rows.add(row("Status", status));
         } catch (Exception e) {
-            rows.add(row("Status", "Error: " + e.getMessage()));
+            log.warn("Failed to retrieve Morphium connection info for Dev UI", e);
+            rows.add(row("Status", "Error retrieving connection info"));
         }
         return rows;
+    }
+
+    /**
+     * Strips userinfo (credentials) from a MongoDB URI to prevent exposing
+     * passwords in the Dev UI. For example, {@code mongodb+srv://user:pass@host}
+     * becomes {@code mongodb+srv://***@host}.
+     */
+    private static String sanitizeUri(String uri) {
+        // Pattern: scheme://userinfo@host... → scheme://***@host...
+        return uri.replaceFirst("(mongodb(?:\\+srv)?://)([^@]+)@", "$1***@");
     }
 
     private static Map<String, String> row(String property, String value) {

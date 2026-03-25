@@ -41,9 +41,9 @@ needed.
 
 == Replica-Set Mode
 
-By default, Dev Services starts MongoDB as a single-node replica set — matching the default
-behavior of MongoDB 8+. This enables multi-document transactions, change streams, and
-`@MorphiumTransactional` out of the box.
+By default, Dev Services starts MongoDB as a single-node replica set via Testcontainers'
+`MongoDBContainer.withReplicaSet()`. This enables multi-document transactions, change streams,
+and `@MorphiumTransactional` out of the box.
 
 The extension uses Testcontainers' `MongoDBContainer` which automatically:
 
@@ -76,7 +76,7 @@ displays:
 | The active Morphium driver implementation (e.g. `PooledDriver`, `InMemoryDriver`).
 
 | Status
-| `Connected` when the Morphium instance is available; error message otherwise.
+| `Connected` or `Disconnected` — reflects the actual runtime connection state.
 |===
 
 == Hot-Reload Behavior
