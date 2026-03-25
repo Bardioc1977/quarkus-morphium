@@ -349,7 +349,7 @@ public List<Map<String, Object>> salesByCategory() {
 | `quarkus.morphium.devservices.enabled` | `true` | Enable automatic MongoDB container |
 | `quarkus.morphium.devservices.image-name` | `mongo:8` | Docker image for Dev Services |
 | `quarkus.morphium.devservices.database-name` | `morphium-dev` | Database name in Dev Services |
-| `quarkus.morphium.devservices.replica-set` | `false` | Start as replica set (enables transactions) |
+| `quarkus.morphium.devservices.replica-set` | `true` | Start as replica set (enables transactions) |
 | `quarkus.morphium.health.enabled` | `true` | Enable health checks |
 
 For detailed descriptions, see the

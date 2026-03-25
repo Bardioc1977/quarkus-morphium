@@ -15,43 +15,30 @@
  */
 package de.caluga.morphium.quarkus.deployment;
 
+import de.caluga.morphium.quarkus.MorphiumDevUIJsonRpcService;
 import io.quarkus.deployment.IsDevelopment;
 import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
-import io.quarkus.deployment.builditem.DevServicesResultBuildItem;
+import io.quarkus.devui.spi.JsonRPCProvidersBuildItem;
 import io.quarkus.devui.spi.page.CardPageBuildItem;
 import io.quarkus.devui.spi.page.Page;
-
-import org.eclipse.microprofile.config.ConfigProvider;
-
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 
 /**
  * Registers the Morphium extension in the Quarkus Dev UI.
  *
- * <p>Produces a {@link CardPageBuildItem} that displays the MongoDB Dev Services
- * connection info (host, port, database) in the Dev UI at {@code /q/dev-ui/}.
+ * <p>Uses a runtime {@link MorphiumDevUIJsonRpcService} to display the actual
+ * MongoDB connection state (including auto-detected replica set mode) in the
+ * Dev UI at {@code /q/dev-ui/}.
  */
 public class MorphiumDevUIProcessor {
 
     @BuildStep(onlyIf = IsDevelopment.class)
-    void createCard(List<DevServicesResultBuildItem> devServicesResults,
-                    MorphiumDevServicesBuildTimeConfig devServicesConfig,
-                    BuildProducer<CardPageBuildItem> cardProducer) {
+    JsonRPCProvidersBuildItem registerJsonRpcService() {
+        return new JsonRPCProvidersBuildItem(MorphiumDevUIJsonRpcService.class);
+    }
 
-        // Find our dev services result by feature name
-        Map<String, String> devConfig = null;
-        String containerId = null;
-        for (DevServicesResultBuildItem result : devServicesResults) {
-            if (MorphiumFeature.FEATURE_NAME.equals(result.getName())) {
-                devConfig = result.getConfig();
-                containerId = result.getContainerId();
-                break;
-            }
-        }
+    @BuildStep(onlyIf = IsDevelopment.class)
+    void createCard(BuildProducer<CardPageBuildItem> cardProducer) {
 
         CardPageBuildItem card = new CardPageBuildItem();
 
@@ -63,55 +50,12 @@ public class MorphiumDevUIProcessor {
         card.addLibraryVersion("jakarta.data", "jakarta.data-api",
                 "Jakarta Data", "https://jakarta.ee/specifications/data/");
 
-        // --- MongoDB Connection page ---
-        List<Map<String, String>> rows = new ArrayList<>();
-        if (devConfig != null) {
-            String shortId = containerId != null
-                    ? containerId.substring(0, Math.min(12, containerId.length()))
-                    : "n/a";
-            String mode = devServicesConfig.replicaSet()
-                    ? "Replica Set (transactions enabled)"
-                    : "Standalone";
-            rows.add(row("Hosts",        devConfig.getOrDefault("quarkus.morphium.hosts", "n/a")));
-            rows.add(row("Database",     devConfig.getOrDefault("quarkus.morphium.database", "n/a")));
-            rows.add(row("Mode",         mode));
-            rows.add(row("Container ID", shortId));
-            rows.add(row("Status",       "Running"));
-        } else {
-            // No Dev Services container — read connection info from application config.
-            // getValue() honours @WithDefault so we see "localhost:27017" even when
-            // the property is not explicitly set in application.properties.
-            var config = ConfigProvider.getConfig();
-            String hosts = config.getOptionalValue("quarkus.morphium.atlas-url", String.class)
-                    .filter(v -> !v.isBlank())
-                    .orElseGet(() -> config.getValue("quarkus.morphium.hosts", String.class));
-            String database = config.getValue("quarkus.morphium.database", String.class);
-            boolean hasReplicaSet = config.getOptionalValue("quarkus.morphium.replica-set-name", String.class)
-                    .filter(v -> !v.isBlank())
-                    .isPresent();
-            String mode = hasReplicaSet
-                    ? "Replica Set (transactions enabled)"
-                    : "Standalone";
-            rows.add(row("Hosts",        hosts));
-            rows.add(row("Database",     database));
-            rows.add(row("Mode",         mode));
-            rows.add(row("Container ID", "—"));
-            rows.add(row("Status",       "External MongoDB"));
-        }
-        card.addBuildTimeData("connectionInfo", rows);
-
-        card.addPage(Page.tableDataPageBuilder("MongoDB Connection")
+        // --- MongoDB Connection page (runtime data via JsonRPC) ---
+        card.addPage(Page.webComponentPageBuilder()
+                .title("MongoDB Connection")
                 .icon("font-awesome-solid:database")
-                .buildTimeDataKey("connectionInfo"));
+                .componentLink("qwc-morphium-connection.js"));
 
         cardProducer.produce(card);
-    }
-
-    /** Creates a row map with guaranteed key order (Property first, Value second). */
-    private static Map<String, String> row(String property, String value) {
-        Map<String, String> map = new LinkedHashMap<>();
-        map.put("Property", property);
-        map.put("Value", value);
-        return map;
     }
 }

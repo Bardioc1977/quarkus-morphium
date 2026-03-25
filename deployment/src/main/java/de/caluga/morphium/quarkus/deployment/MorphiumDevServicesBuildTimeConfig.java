@@ -61,15 +61,13 @@ public interface MorphiumDevServicesBuildTimeConfig {
     /**
      * Whether to start MongoDB as a single-node replica set instead of a standalone instance.
      *
-     * <p>A single-node replica set enables multi-document transactions, which are not
-     * available on a standalone MongoDB. Enable this when your application uses
-     * {@code @MorphiumTransactional} or calls Morphium transaction APIs directly.
+     * <p>Defaults to {@code true} so that multi-document transactions, change streams,
+     * and other oplog-dependent features work out of the box. The extension achieves this
+     * by calling Testcontainers' {@code MongoDBContainer.withReplicaSet()}.
      *
-     * <p>Example:
-     * <pre>{@code
-     * quarkus.morphium.devservices.replica-set=true
-     * }</pre>
+     * <p>Set to {@code false} only if you explicitly need a standalone MongoDB (e.g. with
+     * an older image like {@code mongo:6}).
      */
-    @WithDefault("false")
+    @WithDefault("true")
     boolean replicaSet();
 }

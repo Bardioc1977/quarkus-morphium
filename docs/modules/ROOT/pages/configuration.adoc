@@ -164,8 +164,8 @@ See xref:dev-services.adoc[Dev Services] for details.
 | Database name injected as `quarkus.morphium.database`.
 
 | `quarkus.morphium.devservices.replica-set`
-| `false`
-| Start MongoDB as a single-node replica set. Enables multi-document transactions. Required when using `@MorphiumTransactional` in dev/test mode.
+| `true`
+| Start MongoDB as a single-node replica set. Enables multi-document transactions, change streams, and `@MorphiumTransactional`.
 |===
 
 == Health Check Properties (Build Time)
