@@ -73,7 +73,7 @@ displays:
 | `Standalone` or `Replica Set (transactions enabled)` — detected at runtime via the MongoDB hello handshake.
 
 | Driver
-| The active Morphium driver implementation (e.g. `PooledDriver`, `InMemoryDriver`).
+| The active Morphium driver implementation (e.g. `PooledDriver`, `InMemDriver`).
 
 | Status
 | `Connected` or `Disconnected` — reflects the actual runtime connection state.
