@@ -47,7 +47,11 @@ public interface MorphiumMigrationConfig {
     @WithDefault("morphiumMigrationLock")
     String lockCollection();
 
-    /** Time-to-live in seconds for the migration lock. Prevents deadlocks from crashed processes. */
+    /**
+     * Time-to-live in seconds for the migration lock. Prevents deadlocks from crashed processes.
+     * Must be greater than 0 and should exceed the maximum expected migration runtime.
+     * If migrations take longer than this value, another instance may override the lock.
+     */
     @WithDefault("60")
     int lockTtlSeconds();
 }

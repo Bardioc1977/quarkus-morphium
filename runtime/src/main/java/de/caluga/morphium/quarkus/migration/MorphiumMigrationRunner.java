@@ -48,9 +48,13 @@ public class MorphiumMigrationRunner {
     private final Morphium morphium;
     private final MorphiumMigrationConfig config;
 
+    /** Owner identifier for this runner instance, set during {@link #acquireLock()}. */
+    private String currentOwner;
+
     public MorphiumMigrationRunner(Morphium morphium, MorphiumMigrationConfig config) {
         this.morphium = morphium;
         this.config = config;
+        validateConfig();
     }
 
     /**
@@ -91,6 +95,17 @@ public class MorphiumMigrationRunner {
     }
 
     // ------------------------------------------------------------------
+    // Configuration validation
+    // ------------------------------------------------------------------
+
+    private void validateConfig() {
+        if (config.lockTtlSeconds() <= 0) {
+            throw new IllegalArgumentException(
+                    "quarkus.morphium.migration.lock-ttl-seconds must be > 0, got: " + config.lockTtlSeconds());
+        }
+    }
+
+    // ------------------------------------------------------------------
     // Migration resolution
     // ------------------------------------------------------------------
 
@@ -109,8 +124,8 @@ public class MorphiumMigrationRunner {
 
                 Method execMethod = findAnnotatedMethod(clazz, Execution.class);
                 if (execMethod == null) {
-                    log.warn("@MorphiumChangeUnit {} has no @Execution method — skipping", className);
-                    continue;
+                    throw new IllegalStateException("@MorphiumChangeUnit " + className
+                            + " has no @Execution method — exactly one is required.");
                 }
 
                 Method rollbackMethod = findAnnotatedMethod(clazz, RollbackExecution.class);
@@ -133,13 +148,20 @@ public class MorphiumMigrationRunner {
     }
 
     private Method findAnnotatedMethod(Class<?> clazz, Class<? extends java.lang.annotation.Annotation> annotation) {
+        Method found = null;
         for (Method m : clazz.getDeclaredMethods()) {
             if (m.isAnnotationPresent(annotation)) {
+                if (found != null) {
+                    throw new IllegalStateException("Class " + clazz.getName()
+                            + " has multiple methods annotated with @"
+                            + annotation.getSimpleName()
+                            + " — exactly one is required.");
+                }
                 m.setAccessible(true);
-                return m;
+                found = m;
             }
         }
-        return null;
+        return found;
     }
 
     // ------------------------------------------------------------------
@@ -168,7 +190,7 @@ public class MorphiumMigrationRunner {
         } catch (Exception e) {
             long elapsed = System.currentTimeMillis() - startTime;
             recordExecution(migration, elapsed, MorphiumMigrationEntry.ChangeState.FAILED);
-            log.error("Migration {} failed after {}ms: {}", migration.changeId(), elapsed, e.getMessage());
+            log.error("Migration {} failed after {}ms", migration.changeId(), elapsed, e);
 
             if (migration.rollbackMethod() != null) {
                 tryRollback(migration, instance);
@@ -207,7 +229,7 @@ public class MorphiumMigrationRunner {
                 morphium.store(entry, config.changeLogCollection(), null);
             }
         } catch (Exception re) {
-            log.error("Rollback for {} also failed: {}", migration.changeId(), re.getMessage(), re);
+            log.error("Rollback for {} also failed", migration.changeId(), re);
         }
     }
 
@@ -240,9 +262,23 @@ public class MorphiumMigrationRunner {
     // Distributed lock
     // ------------------------------------------------------------------
 
+    /**
+     * Acquires the migration lock. Checks for existing locks and only proceeds
+     * if no lock exists or the existing lock has expired.
+     *
+     * <p>Uses {@code morphium.store()} with a fixed {@code _id} to ensure at most one
+     * lock document exists. The owner is recorded to enable owner-based release.
+     *
+     * <p><b>Note:</b> In a multi-instance deployment, there is a small race window between
+     * the expiry check and the store. For most migration use cases (startup-only, single pod
+     * rolling deployments) this is acceptable. For strict mutual exclusion, consider an
+     * external distributed lock (e.g., Redis, ZooKeeper).
+     *
+     * @throws RuntimeException if the lock is held by another process
+     */
     private void acquireLock() {
-        String owner = getOwnerIdentifier();
-        log.debug("Acquiring migration lock (owner={})", owner);
+        currentOwner = getOwnerIdentifier();
+        log.debug("Acquiring migration lock (owner={})", currentOwner);
 
         Query<MorphiumMigrationLock> q = morphium.createQueryFor(MorphiumMigrationLock.class);
         q.setCollectionName(config.lockCollection());
@@ -254,7 +290,8 @@ public class MorphiumMigrationRunner {
                 throw new RuntimeException("Migration lock is held by '" + existing.getOwner()
                         + "' (acquired at " + existing.getAcquiredAt()
                         + ", expires at " + existing.getExpiresAt()
-                        + "). If this is stale, wait for TTL expiry or manually remove the '"
+                        + "). If this is stale, wait for TTL expiry or manually remove the lock "
+                        + "document with _id='" + LOCK_ID + "' from the '"
                         + config.lockCollection() + "' collection.");
             }
             log.info("Found expired migration lock from '{}' — overriding", existing.getOwner());
@@ -262,7 +299,7 @@ public class MorphiumMigrationRunner {
 
         MorphiumMigrationLock lock = new MorphiumMigrationLock();
         lock.setId(LOCK_ID);
-        lock.setOwner(owner);
+        lock.setOwner(currentOwner);
         lock.setAcquiredAt(new Date());
         lock.setExpiresAt(new Date(System.currentTimeMillis() + config.lockTtlSeconds() * 1000L));
         morphium.store(lock, config.lockCollection(), null);
@@ -270,15 +307,21 @@ public class MorphiumMigrationRunner {
         log.debug("Migration lock acquired (TTL={}s)", config.lockTtlSeconds());
     }
 
+    /**
+     * Releases the migration lock, but only if this runner still owns it.
+     * If the lock was overridden (e.g., after TTL expiry by another instance),
+     * the lock is not deleted to avoid removing another process's valid lock.
+     */
     private void releaseLock() {
         try {
             Query<MorphiumMigrationLock> q = morphium.createQueryFor(MorphiumMigrationLock.class);
             q.setCollectionName(config.lockCollection());
             q.f("_id").eq(LOCK_ID);
+            q.f("owner").eq(currentOwner);
             morphium.delete(q);
             log.debug("Migration lock released");
         } catch (Exception e) {
-            log.warn("Failed to release migration lock: {}", e.getMessage());
+            log.warn("Failed to release migration lock", e);
         }
     }
 

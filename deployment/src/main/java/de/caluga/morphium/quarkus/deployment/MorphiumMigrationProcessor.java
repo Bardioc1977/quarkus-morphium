@@ -86,6 +86,11 @@ public class MorphiumMigrationProcessor {
      * Produces a {@link ServiceStartBuildItem} to ensure migrations complete before
      * the application starts serving requests.
      */
+    /**
+     * Executes pending migrations at RUNTIME_INIT after the Morphium bean is available.
+     * Build ordering is guaranteed: all STATIC_INIT steps (including bean registration)
+     * complete before any RUNTIME_INIT step runs, so Morphium and config beans are available.
+     */
     @BuildStep
     @Record(ExecutionTime.RUNTIME_INIT)
     ServiceStartBuildItem executeMigrations(MorphiumRecorder recorder) {

@@ -62,7 +62,13 @@ public class MorphiumRecorder {
      */
     public void runMigrations() {
         Morphium morphium = Arc.container().instance(Morphium.class).get();
+        if (morphium == null) {
+            throw new IllegalStateException("Morphium bean not available — cannot run migrations");
+        }
         MorphiumRuntimeConfig config = Arc.container().instance(MorphiumRuntimeConfig.class).get();
+        if (config == null) {
+            throw new IllegalStateException("MorphiumRuntimeConfig not available — cannot run migrations");
+        }
 
         if (!config.migration().migrateAtStart()) {
             log.debug("quarkus.morphium.migration.migrate-at-start=false — skipping migrations");

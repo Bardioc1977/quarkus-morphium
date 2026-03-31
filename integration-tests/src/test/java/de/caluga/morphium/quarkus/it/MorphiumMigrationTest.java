@@ -18,6 +18,7 @@ package de.caluga.morphium.quarkus.it;
 import de.caluga.morphium.Morphium;
 import de.caluga.morphium.quarkus.migration.MorphiumMigrationConfig;
 import de.caluga.morphium.quarkus.migration.MorphiumMigrationEntry;
+import de.caluga.morphium.quarkus.migration.MorphiumMigrationLock;
 import de.caluga.morphium.quarkus.migration.MorphiumMigrationRunner;
 import de.caluga.morphium.query.Query;
 import io.quarkus.test.junit.QuarkusTest;
@@ -35,8 +36,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Integration test for the Morphium migration framework.
- * Tests programmatic migration execution (not migrate-at-start)
- * to avoid side-effects on other tests.
+ * Tests programmatic migration execution using {@link MorphiumMigrationRunner};
+ * the migrate-at-start flag in {@code TestMigrationConfig} is not used in this test.
  */
 @QuarkusTest
 @DisplayName("Morphium Migration Framework")
@@ -133,7 +134,7 @@ class MorphiumMigrationTest {
     @Order(4)
     @DisplayName("Lock is released after migrations complete")
     void lockIsReleasedAfterMigrations() {
-        Query<?> q = morphium.createQueryFor(MorphiumMigrationEntry.class);
+        Query<?> q = morphium.createQueryFor(MorphiumMigrationLock.class);
         q.setCollectionName(LOCK_COLLECTION);
         assertThat(q.countAll()).isZero();
     }

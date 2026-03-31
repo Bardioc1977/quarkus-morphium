@@ -150,15 +150,12 @@ public class MorphiumProcessor {
             }
         }
 
-        // Extension-internal @Entity classes are not in the app Jandex index — register explicitly.
-        String migrationEntryClass = MorphiumMigrationEntry.class.getName();
-        String migrationLockClass = MorphiumMigrationLock.class.getName();
-        if (allClassNames.add(migrationEntryClass)) {
-            registerClass(migrationEntryClass, reflectiveClasses);
-        }
-        if (allClassNames.add(migrationLockClass)) {
-            registerClass(migrationLockClass, reflectiveClasses);
-        }
+        // Extension-internal @Entity classes are not in the app Jandex index — register for
+        // reflection only. They are NOT added to mappedClassNames because their collections may
+        // be renamed via configuration, and ensureIndicesFor() would create indexes on the
+        // annotation-defined names instead of the configured ones.
+        registerClass(MorphiumMigrationEntry.class.getName(), reflectiveClasses);
+        registerClass(MorphiumMigrationLock.class.getName(), reflectiveClasses);
 
         // Pass discovered @Entity/@Embedded classes to runtime for registerTypeIds() pre-registration
         // and index creation. ensureIndicesFor() on @Embedded-only classes is a harmless no-op
