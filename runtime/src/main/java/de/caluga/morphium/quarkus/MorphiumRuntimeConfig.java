@@ -20,6 +20,8 @@ import io.quarkus.runtime.annotations.ConfigRoot;
 import io.smallrye.config.ConfigMapping;
 import io.smallrye.config.WithDefault;
 
+import de.caluga.morphium.quarkus.migration.MorphiumMigrationConfig;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -142,4 +144,7 @@ public interface MorphiumRuntimeConfig {
 
     /** Nested LocalDateTime serialization configuration. */
     LocalDateTimeConfig localDateTime();
+
+    /** Nested database migration configuration. */
+    MorphiumMigrationConfig migration();
 }

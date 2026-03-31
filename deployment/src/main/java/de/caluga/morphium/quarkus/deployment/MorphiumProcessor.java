@@ -18,6 +18,8 @@ package de.caluga.morphium.quarkus.deployment;
 import de.caluga.morphium.annotations.Embedded;
 import de.caluga.morphium.annotations.Entity;
 import de.caluga.morphium.quarkus.MorphiumRecorder;
+import de.caluga.morphium.quarkus.migration.MorphiumMigrationEntry;
+import de.caluga.morphium.quarkus.migration.MorphiumMigrationLock;
 import io.quarkus.arc.deployment.AdditionalBeanBuildItem;
 import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
@@ -146,6 +148,16 @@ public class MorphiumProcessor {
                 // @Embedded classes need pre-registration for typeId mapping
                 allClassNames.add(className);
             }
+        }
+
+        // Extension-internal @Entity classes are not in the app Jandex index — register explicitly.
+        String migrationEntryClass = MorphiumMigrationEntry.class.getName();
+        String migrationLockClass = MorphiumMigrationLock.class.getName();
+        if (allClassNames.add(migrationEntryClass)) {
+            registerClass(migrationEntryClass, reflectiveClasses);
+        }
+        if (allClassNames.add(migrationLockClass)) {
+            registerClass(migrationLockClass, reflectiveClasses);
         }
 
         // Pass discovered @Entity/@Embedded classes to runtime for registerTypeIds() pre-registration
