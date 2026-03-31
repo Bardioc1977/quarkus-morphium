@@ -18,6 +18,7 @@ package de.caluga.morphium.quarkus;
 import de.caluga.morphium.Morphium;
 import de.caluga.morphium.quarkus.migration.MorphiumMigrationRunner;
 import io.quarkus.arc.Arc;
+import io.quarkus.arc.InstanceHandle;
 import io.quarkus.runtime.annotations.Recorder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -61,28 +62,32 @@ public class MorphiumRecorder {
      * Triggers migration execution if configured.
      */
     public void runMigrations() {
-        Morphium morphium = Arc.container().instance(Morphium.class).get();
-        if (morphium == null) {
-            throw new IllegalStateException("Morphium bean not available — cannot run migrations");
-        }
-        MorphiumRuntimeConfig config = Arc.container().instance(MorphiumRuntimeConfig.class).get();
-        if (config == null) {
-            throw new IllegalStateException("MorphiumRuntimeConfig not available — cannot run migrations");
-        }
+        try (InstanceHandle<Morphium> morphiumHandle = Arc.container().instance(Morphium.class);
+             InstanceHandle<MorphiumRuntimeConfig> configHandle = Arc.container().instance(MorphiumRuntimeConfig.class)) {
 
-        if (!config.migration().migrateAtStart()) {
-            log.debug("quarkus.morphium.migration.migrate-at-start=false — skipping migrations");
-            return;
-        }
+            Morphium morphium = morphiumHandle.get();
+            if (morphium == null) {
+                throw new IllegalStateException("Morphium bean not available — cannot run migrations");
+            }
+            MorphiumRuntimeConfig config = configHandle.get();
+            if (config == null) {
+                throw new IllegalStateException("MorphiumRuntimeConfig not available — cannot run migrations");
+            }
 
-        if (migrationClassNames.isEmpty()) {
-            log.info("No @MorphiumChangeUnit classes discovered — nothing to migrate");
-            return;
-        }
+            if (!config.migration().migrateAtStart()) {
+                log.debug("quarkus.morphium.migration.migrate-at-start=false — skipping migrations");
+                return;
+            }
 
-        log.info("Running {} database migration(s) at startup", migrationClassNames.size());
-        MorphiumMigrationRunner runner = new MorphiumMigrationRunner(morphium, config.migration());
-        runner.execute(migrationClassNames);
+            if (migrationClassNames.isEmpty()) {
+                log.info("No @MorphiumChangeUnit classes discovered — nothing to migrate");
+                return;
+            }
+
+            log.info("Running {} database migration(s) at startup", migrationClassNames.size());
+            MorphiumMigrationRunner runner = new MorphiumMigrationRunner(morphium, config.migration());
+            runner.execute(migrationClassNames);
+        }
     }
 
     static List<String> getMappedClassNames() {

@@ -24,8 +24,9 @@ import java.util.Date;
 /**
  * Distributed lock entity for migration execution. Only one instance
  * of the lock document (with a fixed {@code _id}) exists at a time.
- * The lock expires automatically after the configured TTL to prevent
- * deadlocks from crashed processes.
+ * The lock contains an expiration timestamp used to treat the lock as
+ * expired and allow overriding stale locks after the configured TTL,
+ * helping to prevent deadlocks from crashed processes.
  */
 @Entity(collectionName = "morphiumMigrationLock")
 public class MorphiumMigrationLock {

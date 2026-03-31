@@ -26,6 +26,8 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Executes pending database migrations defined by {@link MorphiumChangeUnit} classes.
@@ -80,8 +82,9 @@ public class MorphiumMigrationRunner {
 
         acquireLock();
         try {
+            Set<String> executedIds = loadExecutedChangeIds();
             for (MigrationInfo migration : migrations) {
-                if (isAlreadyExecuted(migration.changeId())) {
+                if (executedIds.contains(migration.changeId())) {
                     log.debug("Skipping already executed migration: {} ({})", migration.changeId(), migration.className());
                     continue;
                 }
@@ -237,12 +240,17 @@ public class MorphiumMigrationRunner {
     // Changelog tracking
     // ------------------------------------------------------------------
 
-    private boolean isAlreadyExecuted(String changeId) {
+    /**
+     * Loads the set of change IDs that have already been executed successfully.
+     * Called once before the migration loop to avoid N+1 queries.
+     */
+    private Set<String> loadExecutedChangeIds() {
         Query<MorphiumMigrationEntry> q = morphium.createQueryFor(MorphiumMigrationEntry.class);
         q.setCollectionName(config.changeLogCollection());
-        q.f("change_id").eq(changeId);
         q.f("state").eq(MorphiumMigrationEntry.ChangeState.EXECUTED.name());
-        return q.countAll() > 0;
+        return q.asList().stream()
+                .map(MorphiumMigrationEntry::getChangeId)
+                .collect(Collectors.toSet());
     }
 
     private void recordExecution(MigrationInfo migration, long executionTimeMs,

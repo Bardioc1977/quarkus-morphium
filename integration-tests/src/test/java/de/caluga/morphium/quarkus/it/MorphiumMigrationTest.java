@@ -63,6 +63,8 @@ class MorphiumMigrationTest {
     void migrationsExecuteAndTrack() {
         // Clean up from potential previous runs
         morphium.dropCollection(MorphiumMigrationEntry.class, CHANGELOG_COLLECTION, null);
+        morphium.dropCollection(MorphiumMigrationLock.class, LOCK_COLLECTION, null);
+        morphium.dropCollection(ItemEntity.class);
 
         List<String> migrations = List.of(
                 InitItemsMigration.class.getName(),
