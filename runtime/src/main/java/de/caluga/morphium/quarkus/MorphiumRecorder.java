@@ -15,7 +15,13 @@
  */
 package de.caluga.morphium.quarkus;
 
+import de.caluga.morphium.Morphium;
+import de.caluga.morphium.quarkus.migration.MorphiumMigrationRunner;
+import io.quarkus.arc.Arc;
+import io.quarkus.arc.InstanceHandle;
 import io.quarkus.runtime.annotations.Recorder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
 import java.util.List;
@@ -28,19 +34,70 @@ import java.util.List;
  * and pre-register them via {@code AnnotationAndReflectionHelper.registerTypeIds()}
  * when the {@code Morphium} instance is created. This skips the ClassGraph scan
  * at runtime and handles dev-mode hot-reload.
+ *
+ * <p>Also stores {@code @MorphiumChangeUnit} class names and triggers migration
+ * execution at runtime when {@code quarkus.morphium.migration.migrate-at-start=true}.
  */
 @Recorder
 public class MorphiumRecorder {
 
+    private static final Logger log = LoggerFactory.getLogger(MorphiumRecorder.class);
+
     private static volatile List<String> mappedClassNames = Collections.emptyList();
+    private static volatile List<String> migrationClassNames = Collections.emptyList();
 
     public void setMappedClassNames(List<String> classNames) {
         mappedClassNames = classNames == null ? Collections.emptyList() : List.copyOf(classNames);
-        // Actual registerTypeIds() call happens in MorphiumProducer.buildMorphium()
-        // so that dev-mode hot-reload (clear + re-register) works correctly.
+    }
+
+    public void setMigrationClassNames(List<String> classNames) {
+        migrationClassNames = classNames == null ? Collections.emptyList() : List.copyOf(classNames);
+        if (!migrationClassNames.isEmpty()) {
+            log.debug("Registered {} @MorphiumChangeUnit migration classes", migrationClassNames.size());
+        }
+    }
+
+    /**
+     * Called at RUNTIME_INIT after the BeanContainer is available.
+     * Triggers migration execution if configured.
+     */
+    public void runMigrations() {
+        // Resolve config first to check migrateAtStart before triggering Morphium initialization
+        try (InstanceHandle<MorphiumRuntimeConfig> configHandle = Arc.container().instance(MorphiumRuntimeConfig.class)) {
+            MorphiumRuntimeConfig config = configHandle.get();
+            if (config == null) {
+                throw new IllegalStateException("MorphiumRuntimeConfig not available — cannot run migrations");
+            }
+
+            if (!config.migration().migrateAtStart()) {
+                log.debug("quarkus.morphium.migration.migrate-at-start=false — skipping migrations");
+                return;
+            }
+
+            if (migrationClassNames.isEmpty()) {
+                log.info("No @MorphiumChangeUnit classes discovered — nothing to migrate");
+                return;
+            }
+
+            // Only resolve Morphium (triggering DB connection) when migrations are actually needed
+            try (InstanceHandle<Morphium> morphiumHandle = Arc.container().instance(Morphium.class)) {
+                Morphium morphium = morphiumHandle.get();
+                if (morphium == null) {
+                    throw new IllegalStateException("Morphium bean not available — cannot run migrations");
+                }
+
+                log.info("Running {} database migration(s) at startup", migrationClassNames.size());
+                MorphiumMigrationRunner runner = new MorphiumMigrationRunner(morphium, config.migration());
+                runner.execute(migrationClassNames);
+            }
+        }
     }
 
     static List<String> getMappedClassNames() {
         return mappedClassNames;
+    }
+
+    static List<String> getMigrationClassNames() {
+        return migrationClassNames;
     }
 }

@@ -18,6 +18,8 @@ package de.caluga.morphium.quarkus.deployment;
 import de.caluga.morphium.annotations.Embedded;
 import de.caluga.morphium.annotations.Entity;
 import de.caluga.morphium.quarkus.MorphiumRecorder;
+import de.caluga.morphium.quarkus.migration.MorphiumMigrationEntry;
+import de.caluga.morphium.quarkus.migration.MorphiumMigrationLock;
 import io.quarkus.arc.deployment.AdditionalBeanBuildItem;
 import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
@@ -147,6 +149,13 @@ public class MorphiumProcessor {
                 allClassNames.add(className);
             }
         }
+
+        // Extension-internal @Entity classes are not in the app Jandex index — register for
+        // reflection only. They are NOT added to mappedClassNames because their collections may
+        // be renamed via configuration, and ensureIndicesFor() would create indexes on the
+        // annotation-defined names instead of the configured ones.
+        registerClass(MorphiumMigrationEntry.class.getName(), reflectiveClasses);
+        registerClass(MorphiumMigrationLock.class.getName(), reflectiveClasses);
 
         // Pass discovered @Entity/@Embedded classes to runtime for registerTypeIds() pre-registration
         // and index creation. ensureIndicesFor() on @Embedded-only classes is a harmless no-op
