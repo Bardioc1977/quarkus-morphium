@@ -33,6 +33,7 @@ import org.junit.jupiter.api.TestMethodOrder;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Integration test for the Morphium migration framework.
@@ -147,6 +148,34 @@ class MorphiumMigrationTest {
     void emptyMigrationList() {
         // Should not throw
         runner.execute(List.of());
+    }
+
+    @Test
+    @Order(6)
+    @DisplayName("Failed migration triggers rollback and records ROLLED_BACK state")
+    void failedMigrationTriggersRollback() {
+        FailingMigration.rollbackExecuted = false;
+
+        assertThatThrownBy(() -> runner.execute(List.of(FailingMigration.class.getName())))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("999-failing");
+
+        // Verify rollback was executed
+        assertThat(FailingMigration.rollbackExecuted).isTrue();
+
+        // Verify changelog entry has ROLLED_BACK state
+        Query<MorphiumMigrationEntry> q = morphium.createQueryFor(MorphiumMigrationEntry.class);
+        q.setCollectionName(CHANGELOG_COLLECTION);
+        q.f("_id").eq("999-failing");
+        MorphiumMigrationEntry entry = q.get();
+
+        assertThat(entry).isNotNull();
+        assertThat(entry.getState()).isEqualTo(MorphiumMigrationEntry.ChangeState.ROLLED_BACK);
+
+        // Verify lock is released even after failure
+        Query<?> lockQ = morphium.createQueryFor(MorphiumMigrationLock.class);
+        lockQ.setCollectionName(LOCK_COLLECTION);
+        assertThat(lockQ.countAll()).isZero();
     }
 
     // ------------------------------------------------------------------

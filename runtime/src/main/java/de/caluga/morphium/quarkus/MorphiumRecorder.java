@@ -62,13 +62,8 @@ public class MorphiumRecorder {
      * Triggers migration execution if configured.
      */
     public void runMigrations() {
-        try (InstanceHandle<Morphium> morphiumHandle = Arc.container().instance(Morphium.class);
-             InstanceHandle<MorphiumRuntimeConfig> configHandle = Arc.container().instance(MorphiumRuntimeConfig.class)) {
-
-            Morphium morphium = morphiumHandle.get();
-            if (morphium == null) {
-                throw new IllegalStateException("Morphium bean not available — cannot run migrations");
-            }
+        // Resolve config first to check migrateAtStart before triggering Morphium initialization
+        try (InstanceHandle<MorphiumRuntimeConfig> configHandle = Arc.container().instance(MorphiumRuntimeConfig.class)) {
             MorphiumRuntimeConfig config = configHandle.get();
             if (config == null) {
                 throw new IllegalStateException("MorphiumRuntimeConfig not available — cannot run migrations");
@@ -84,9 +79,17 @@ public class MorphiumRecorder {
                 return;
             }
 
-            log.info("Running {} database migration(s) at startup", migrationClassNames.size());
-            MorphiumMigrationRunner runner = new MorphiumMigrationRunner(morphium, config.migration());
-            runner.execute(migrationClassNames);
+            // Only resolve Morphium (triggering DB connection) when migrations are actually needed
+            try (InstanceHandle<Morphium> morphiumHandle = Arc.container().instance(Morphium.class)) {
+                Morphium morphium = morphiumHandle.get();
+                if (morphium == null) {
+                    throw new IllegalStateException("Morphium bean not available — cannot run migrations");
+                }
+
+                log.info("Running {} database migration(s) at startup", migrationClassNames.size());
+                MorphiumMigrationRunner runner = new MorphiumMigrationRunner(morphium, config.migration());
+                runner.execute(migrationClassNames);
+            }
         }
     }
 

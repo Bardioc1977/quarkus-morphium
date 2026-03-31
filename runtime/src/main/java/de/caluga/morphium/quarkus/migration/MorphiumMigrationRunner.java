@@ -25,6 +25,7 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -77,6 +78,7 @@ public class MorphiumMigrationRunner {
             return;
         }
 
+        validateUniqueIds(migrations);
         migrations.sort(Comparator.comparing(MigrationInfo::order));
         log.info("Found {} migration(s) to evaluate", migrations.size());
 
@@ -108,6 +110,20 @@ public class MorphiumMigrationRunner {
         }
     }
 
+    private void validateUniqueIds(List<MigrationInfo> migrations) {
+        Set<String> seen = new HashSet<>();
+        for (MigrationInfo m : migrations) {
+            if (m.changeId() == null || m.changeId().isBlank()) {
+                throw new IllegalStateException("@MorphiumChangeUnit " + m.className()
+                        + " has an empty id — a non-blank id is required.");
+            }
+            if (!seen.add(m.changeId())) {
+                throw new IllegalStateException("Duplicate @MorphiumChangeUnit id '"
+                        + m.changeId() + "' — each migration must have a unique id.");
+            }
+        }
+    }
+
     // ------------------------------------------------------------------
     // Migration resolution
     // ------------------------------------------------------------------
@@ -125,13 +141,8 @@ public class MorphiumMigrationRunner {
                     continue;
                 }
 
-                Method execMethod = findAnnotatedMethod(clazz, Execution.class);
-                if (execMethod == null) {
-                    throw new IllegalStateException("@MorphiumChangeUnit " + className
-                            + " has no @Execution method — exactly one is required.");
-                }
-
-                Method rollbackMethod = findAnnotatedMethod(clazz, RollbackExecution.class);
+                Method execMethod = findAnnotatedMethod(clazz, Execution.class, true);
+                Method rollbackMethod = findAnnotatedMethod(clazz, RollbackExecution.class, false);
 
                 result.add(new MigrationInfo(
                         annotation.id(),
@@ -150,7 +161,8 @@ public class MorphiumMigrationRunner {
         return result;
     }
 
-    private Method findAnnotatedMethod(Class<?> clazz, Class<? extends java.lang.annotation.Annotation> annotation) {
+    private Method findAnnotatedMethod(Class<?> clazz, Class<? extends java.lang.annotation.Annotation> annotation,
+                                       boolean required) {
         Method found = null;
         for (Method m : clazz.getDeclaredMethods()) {
             if (m.isAnnotationPresent(annotation)) {
@@ -158,11 +170,15 @@ public class MorphiumMigrationRunner {
                     throw new IllegalStateException("Class " + clazz.getName()
                             + " has multiple methods annotated with @"
                             + annotation.getSimpleName()
-                            + " — exactly one is required.");
+                            + (required ? " — exactly one is required." : " — at most one is allowed."));
                 }
                 m.setAccessible(true);
                 found = m;
             }
+        }
+        if (found == null && required) {
+            throw new IllegalStateException("@MorphiumChangeUnit " + clazz.getName()
+                    + " has no @" + annotation.getSimpleName() + " method — exactly one is required.");
         }
         return found;
     }
@@ -224,8 +240,7 @@ public class MorphiumMigrationRunner {
             // Update the changelog entry to ROLLED_BACK
             Query<MorphiumMigrationEntry> q = morphium.createQueryFor(MorphiumMigrationEntry.class);
             q.setCollectionName(config.changeLogCollection());
-            q.f("change_id").eq(migration.changeId());
-            q.f("state").eq(MorphiumMigrationEntry.ChangeState.FAILED.name());
+            q.f("_id").eq(migration.changeId());
             MorphiumMigrationEntry entry = q.get();
             if (entry != null) {
                 entry.setState(MorphiumMigrationEntry.ChangeState.ROLLED_BACK);
@@ -256,6 +271,7 @@ public class MorphiumMigrationRunner {
     private void recordExecution(MigrationInfo migration, long executionTimeMs,
                                  MorphiumMigrationEntry.ChangeState state) {
         MorphiumMigrationEntry entry = new MorphiumMigrationEntry();
+        entry.setId(migration.changeId());
         entry.setChangeId(migration.changeId());
         entry.setAuthor(migration.author());
         entry.setOrder(migration.order());

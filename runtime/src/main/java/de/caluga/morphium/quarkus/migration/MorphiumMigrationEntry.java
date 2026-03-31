@@ -17,7 +17,6 @@ package de.caluga.morphium.quarkus.migration;
 
 import de.caluga.morphium.annotations.Entity;
 import de.caluga.morphium.annotations.Id;
-import de.caluga.morphium.annotations.Index;
 import de.caluga.morphium.annotations.Property;
 
 import java.util.Date;
@@ -38,7 +37,6 @@ public class MorphiumMigrationEntry {
     @Id
     private String id;
 
-    @Index
     @Property(fieldName = "change_id")
     private String changeId;
 
