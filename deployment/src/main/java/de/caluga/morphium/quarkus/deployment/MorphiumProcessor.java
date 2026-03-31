@@ -124,7 +124,7 @@ public class MorphiumProcessor {
 
     @BuildStep
     @Record(ExecutionTime.RUNTIME_INIT)
-    void registerEntitiesForReflection(BuildProducer<ReflectiveClassBuildItem> reflectiveClasses,
+    MorphiumEntitiesRegisteredBuildItem registerEntitiesForReflection(BuildProducer<ReflectiveClassBuildItem> reflectiveClasses,
                                        CombinedIndexBuildItem combinedIndex,
                                        MorphiumRecorder recorder) {
         // Use a Set to avoid duplicates (a class could theoretically have both annotations)
@@ -165,6 +165,7 @@ public class MorphiumProcessor {
             log.infof("Morphium: passing %d @Entity/@Embedded classes for runtime pre-registration", allClassNames.size());
         }
         recorder.setMappedClassNames(new ArrayList<>(allClassNames));
+        return new MorphiumEntitiesRegisteredBuildItem();
     }
 
     private void registerClass(String className,
