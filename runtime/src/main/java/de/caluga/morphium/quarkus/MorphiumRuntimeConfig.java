@@ -108,22 +108,29 @@ public interface MorphiumRuntimeConfig {
     int maxConnections();
 
     /**
-     * Maximum time (in milliseconds) that Morphium waits for a server response.
+     * Maximum time (in milliseconds) for low-level operations such as waiting
+     * for a connection from the pool, driver-level timeouts, and change streams.
      *
-     * <p><b>Important:</b> Morphium uses this value as {@code maxTimeMS} on every
-     * MongoDB {@code find} command, limiting the server-side execution time for both
-     * the initial query and all subsequent {@code getMore} cursor operations. If a
-     * query exceeds this limit, MongoDB returns error 50 ({@code ExceededTimeLimit}).
-     *
-     * <p>The Morphium default ({@code 2000} ms) is too aggressive for large
-     * result sets (e.g. {@code $in} queries returning tens of thousands of
-     * documents). Increase this value for applications with heavy read workloads.
-     *
-     * <p>Set to {@code 0} to disable the server-side time limit entirely
-     * (Morphium will set {@code noCursorTimeout} instead).
+     * <p>This does <em>not</em> affect query execution time limits — use
+     * {@link #defaultQueryTimeoutMs()} for that.
      */
-    @WithDefault("30000")
+    @WithDefault("2000")
     int maxWaitTime();
+
+    /**
+     * Default server-side time limit (in milliseconds) for queries when no
+     * per-query {@code maxTimeMS} is set via {@code Query.setMaxTimeMS()}.
+     *
+     * <p>MongoDB enforces this as {@code maxTimeMS} across the entire cursor
+     * lifecycle (initial {@code find} + all subsequent {@code getMore} operations).
+     * If a query exceeds this limit, MongoDB returns error 50 ({@code ExceededTimeLimit}).
+     *
+     * <p>Set to {@code 0} (the default) to disable the server-side time limit
+     * entirely (Morphium will set {@code noCursorTimeout} instead). Set to a
+     * positive value (e.g. {@code 60000}) to enforce a global query timeout.
+     */
+    @WithDefault("0")
+    int defaultQueryTimeoutMs();
 
     /**
      * Optional MongoDB Atlas connection string ({@code mongodb+srv://...}).

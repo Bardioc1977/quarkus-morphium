@@ -148,6 +148,7 @@ public class MorphiumProducer {
         cfg.driverSettings().setDriverName(config.driverName());
         cfg.connectionSettings().setMaxConnections(config.maxConnections());
         cfg.connectionSettings().setMaxWaitTime(config.maxWaitTime());
+        cfg.connectionSettings().setDefaultQueryTimeoutMS(config.defaultQueryTimeoutMs());
         cfg.driverSettings().setDefaultReadPreferenceType(config.readPreference());
 
         // Morphium's internal checkIndices() uses ClassGraph at startup.
