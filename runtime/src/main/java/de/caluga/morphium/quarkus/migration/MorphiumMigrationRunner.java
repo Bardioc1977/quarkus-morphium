@@ -27,6 +27,7 @@ import java.util.Comparator;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -287,16 +288,13 @@ public class MorphiumMigrationRunner {
     // ------------------------------------------------------------------
 
     /**
-     * Acquires the migration lock. Checks for existing locks and only proceeds
-     * if no lock exists or the existing lock has expired.
+     * Acquires the migration lock atomically using {@code findAndModify} with {@code upsert: true}.
      *
-     * <p>Uses {@code morphium.store()} with a fixed {@code _id} to ensure at most one
-     * lock document exists. The owner is recorded to enable owner-based release.
+     * <p>The query matches a lock document that either does not exist or has expired.
+     * The atomic update sets the new owner and expiration in one round-trip, preventing
+     * the race condition where two instances could both read "no lock" and then both write.
      *
-     * <p><b>Note:</b> In a multi-instance deployment, there is a small race window between
-     * the expiry check and the store. For most migration use cases (startup-only, single pod
-     * rolling deployments) this is acceptable. For strict mutual exclusion, consider an
-     * external distributed lock (e.g., Redis, ZooKeeper).
+     * <p>If the lock is held by another process and has not expired, the method throws.
      *
      * @throws RuntimeException if the lock is held by another process
      */
@@ -304,31 +302,68 @@ public class MorphiumMigrationRunner {
         currentOwner = getOwnerIdentifier();
         log.debug("Acquiring migration lock (owner={})", currentOwner);
 
+        Date now = new Date();
+        Date expiresAt = new Date(now.getTime() + config.lockTtlSeconds() * 1000L);
+
+        // Atomic: match _id=LOCK_ID where lock is expired (or does not exist via upsert),
+        // then $set owner, acquired_at, expires_at in one round-trip.
         Query<MorphiumMigrationLock> q = morphium.createQueryFor(MorphiumMigrationLock.class);
         q.setCollectionName(config.lockCollection());
         q.f("_id").eq(LOCK_ID);
-        MorphiumMigrationLock existing = q.get();
+        q.f("expires_at").lte(now);
 
-        if (existing != null) {
-            if (existing.getExpiresAt() != null && existing.getExpiresAt().after(new Date())) {
-                throw new RuntimeException("Migration lock is held by '" + existing.getOwner()
-                        + "' (acquired at " + existing.getAcquiredAt()
-                        + ", expires at " + existing.getExpiresAt()
-                        + "). If this is stale, wait for TTL expiry or manually remove the lock "
-                        + "document with _id='" + LOCK_ID + "' from the '"
-                        + config.lockCollection() + "' collection.");
+        Map<String, Object> update = Map.of(
+                "owner", currentOwner,
+                "acquired_at", now,
+                "expires_at", expiresAt);
+
+        try {
+            var result = q.set(update, true, false);
+
+            // MongoDB returns: n (matched count), nModified, ok, and upserted (array) on upsert.
+            // If n==0 and no upsert happened, the lock is held by another process.
+            if (result == null) {
+                throwLockHeld();
+                return;
             }
-            log.info("Found expired migration lock from '{}' — overriding", existing.getOwner());
+
+            Object n = result.get("n");
+            Object upserted = result.get("upserted");
+            long matchedCount = n instanceof Number num ? num.longValue() : 0;
+            boolean wasUpserted = upserted != null;
+
+            if (matchedCount == 0 && !wasUpserted) {
+                throwLockHeld();
+                return;
+            }
+        } catch (RuntimeException e) {
+            // DuplicateKeyError when _id exists but expires_at condition didn't match (lock still active)
+            if (e.getMessage() != null && e.getMessage().contains("duplicate key")) {
+                throwLockHeld();
+                return;
+            }
+            throw e;
         }
 
-        MorphiumMigrationLock lock = new MorphiumMigrationLock();
-        lock.setId(LOCK_ID);
-        lock.setOwner(currentOwner);
-        lock.setAcquiredAt(new Date());
-        lock.setExpiresAt(new Date(System.currentTimeMillis() + config.lockTtlSeconds() * 1000L));
-        morphium.store(lock, config.lockCollection(), null);
-
         log.debug("Migration lock acquired (TTL={}s)", config.lockTtlSeconds());
+    }
+
+    private void throwLockHeld() {
+        // Read the current lock to provide a helpful error message
+        Query<MorphiumMigrationLock> readQ = morphium.createQueryFor(MorphiumMigrationLock.class);
+        readQ.setCollectionName(config.lockCollection());
+        readQ.f("_id").eq(LOCK_ID);
+        MorphiumMigrationLock existing = readQ.get();
+
+        String detail = existing != null
+                ? "held by '" + existing.getOwner() + "' (acquired at " + existing.getAcquiredAt()
+                        + ", expires at " + existing.getExpiresAt() + ")"
+                : "in unknown state";
+
+        throw new RuntimeException("Migration lock is " + detail
+                + ". If this is stale, wait for TTL expiry or manually remove the lock "
+                + "document with _id='" + LOCK_ID + "' from the '"
+                + config.lockCollection() + "' collection.");
     }
 
     /**
