@@ -34,6 +34,8 @@ import jakarta.interceptor.InvocationContext;
  *   <li>Fires {@link Phase#BEFORE_COMMIT} before committing.</li>
  *   <li>Fires {@link Phase#AFTER_COMMIT} after a successful commit.</li>
  *   <li>On exception: aborts, fires {@link Phase#AFTER_ROLLBACK}, re-throws.</li>
+ *   <li>On transient MongoDB errors (WriteConflict 112, NoSuchTransaction 251):
+ *       retries the entire transaction up to 3 times with linear backoff.</li>
  *   <li>On CosmosDB: skips transaction wrapping but still fires lifecycle events
  *       ({@code BEFORE_COMMIT}/{@code AFTER_COMMIT} on success, {@code AFTER_ROLLBACK}
  *       on exception) so that observers continue to work. A one-time WARN is logged
@@ -126,16 +128,37 @@ public class MorphiumTransactionalInterceptor {
         if (writeBufferWasEnabled) {
             morphium.disableWriteBufferForThread();
         }
+        int maxRetries = 3;
         try {
-            Object result = ctx.proceed();
-            beforeCommit.fire(new MorphiumTransactionEvent(Phase.BEFORE_COMMIT));
-            safeCommit();
-            afterCommit.fire(new MorphiumTransactionEvent(Phase.AFTER_COMMIT));
-            return result;
-        } catch (Exception e) {
-            safeAbort();
-            afterRollback.fire(new MorphiumTransactionEvent(Phase.AFTER_ROLLBACK, e));
-            throw e;
+            for (int attempt = 0; ; attempt++) {
+                try {
+                    Object result = ctx.proceed();
+                    beforeCommit.fire(new MorphiumTransactionEvent(Phase.BEFORE_COMMIT));
+                    safeCommit();
+                    afterCommit.fire(new MorphiumTransactionEvent(Phase.AFTER_COMMIT));
+                    return result;
+                } catch (Exception e) {
+                    safeAbort();
+                    if (attempt < maxRetries && isTransientTransactionError(e)) {
+                        log.warnf("Transient transaction error on %s.%s (attempt %d/%d) — retrying entire transaction: %s",
+                                ctx.getMethod().getDeclaringClass().getSimpleName(),
+                                ctx.getMethod().getName(),
+                                attempt + 1, maxRetries,
+                                e.getMessage());
+                        try {
+                            Thread.sleep(50L * (attempt + 1)); // linear backoff
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            afterRollback.fire(new MorphiumTransactionEvent(Phase.AFTER_ROLLBACK, e));
+                            throw e;
+                        }
+                        morphium.startTransaction();
+                        continue;
+                    }
+                    afterRollback.fire(new MorphiumTransactionEvent(Phase.AFTER_ROLLBACK, e));
+                    throw e;
+                }
+            }
         } finally {
             if (writeBufferWasEnabled) {
                 morphium.enableWriteBufferForThread();
@@ -205,5 +228,37 @@ public class MorphiumTransactionalInterceptor {
             afterRollback.fire(new MorphiumTransactionEvent(Phase.AFTER_ROLLBACK, e));
             throw e;
         }
+    }
+
+    /**
+     * Returns {@code true} if the exception (or any cause in its chain) is a
+     * transient MongoDB transaction error that is safe to retry:
+     * <ul>
+     *   <li>112 — WriteConflict (includes transaction eviction under load)</li>
+     *   <li>251 — NoSuchTransaction (transaction expired on the server)</li>
+     * </ul>
+     */
+    static boolean isTransientTransactionError(Exception e) {
+        if (!(e instanceof MorphiumDriverException mde)) {
+            // Check cause chain — Morphium exceptions are often wrapped
+            Throwable cause = e.getCause();
+            while (cause != null) {
+                if (cause instanceof MorphiumDriverException mdeCause) {
+                    return isTransientMongoCode(mdeCause);
+                }
+                cause = cause.getCause();
+            }
+            return false;
+        }
+        return isTransientMongoCode(mde);
+    }
+
+    private static boolean isTransientMongoCode(MorphiumDriverException e) {
+        if (e.getMongoCode() instanceof Number mc) {
+            int code = mc.intValue();
+            return code == 112  // WriteConflict (incl. transaction eviction)
+                || code == 251; // NoSuchTransaction
+        }
+        return false;
     }
 }
