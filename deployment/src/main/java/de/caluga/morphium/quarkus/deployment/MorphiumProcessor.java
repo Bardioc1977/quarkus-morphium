@@ -123,7 +123,7 @@ public class MorphiumProcessor {
     // ------------------------------------------------------------------
 
     @BuildStep
-    @Record(ExecutionTime.RUNTIME_INIT)
+    @Record(ExecutionTime.STATIC_INIT)
     void registerEntitiesForReflection(BuildProducer<ReflectiveClassBuildItem> reflectiveClasses,
                                        CombinedIndexBuildItem combinedIndex,
                                        MorphiumRecorder recorder) {
