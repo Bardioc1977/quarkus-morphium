@@ -917,6 +917,13 @@ public class MorphiumDataProcessor {
                 mc.returnValue(result);
             }
         }
+
+        log.infof("Generated query-derivation method: %s.%s%s → %s (conditions: %d, orderBy: %s)",
+                method.declaringClass().name(), methodName,
+                isAsync ? " (async)" : "",
+                descriptor.prefix().name().toLowerCase(),
+                descriptor.conditions().size(),
+                orderBySpec.isEmpty() ? "none" : orderBySpec);
     }
 
     private String toDescriptorName(Type type) {
@@ -989,6 +996,7 @@ public class MorphiumDataProcessor {
                                               Set<String> entityFields) {
         // Build conditions spec and identify special params
         StringBuilder conditionsSpec = new StringBuilder();
+        int conditionCount = 0;
         int sortParamIndex = -1;
         int orderParamIndex = -1;
         int pageRequestParamIndex = -1;
@@ -1032,6 +1040,7 @@ public class MorphiumDataProcessor {
                 }
                 if (conditionsSpec.length() > 0) conditionsSpec.append(",");
                 conditionsSpec.append(fieldName).append(":").append(i);
+                conditionCount++;
             }
         }
 
@@ -1112,8 +1121,11 @@ public class MorphiumDataProcessor {
             mc.returnValue(result);
         }
 
-        log.infof("Generated @Find method: %s.%s%s", method.declaringClass().name(), method.name(),
-                isAsync ? " (async)" : "");
+        log.infof("Generated @Find method: %s.%s%s → find (conditions: %d, orderBy: %s)",
+                method.declaringClass().name(), method.name(),
+                isAsync ? " (async)" : "",
+                conditionCount,
+                orderBySpec.isEmpty() ? "none" : orderBySpec);
     }
 
     /**
@@ -1517,7 +1529,7 @@ public class MorphiumDataProcessor {
         }
 
         log.infof("Generated @Query method: %s.%s%s → JDQL: %s", method.declaringClass().name(), method.name(),
-                isAsync ? " (async)" : "", jdql);
+                isAsync ? " (async)" : "", jdql == null || jdql.isBlank() ? "(no filter / find all)" : jdql);
     }
 
     /**
