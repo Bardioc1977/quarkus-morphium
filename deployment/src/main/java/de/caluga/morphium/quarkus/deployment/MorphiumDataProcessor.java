@@ -921,14 +921,14 @@ public class MorphiumDataProcessor {
         log.infof("Generated query-derivation method: %s.%s%s → %s (conditions: %d, orderBy: %s)",
                 method.declaringClass().name(), methodName,
                 isAsync ? " (async)" : "",
-                descriptor.prefix().name().toLowerCase(),
+                descriptor.prefix().name().toLowerCase(Locale.ROOT),
                 descriptor.conditions().size(),
                 orderBySpec.isEmpty() ? "none" : orderBySpec);
     }
 
     private String toDescriptorName(Type type) {
         if (type.kind() == Type.Kind.PRIMITIVE) {
-            return type.asPrimitiveType().primitive().name().toLowerCase();
+            return type.asPrimitiveType().primitive().name().toLowerCase(Locale.ROOT);
         }
         return type.name().toString();
     }
