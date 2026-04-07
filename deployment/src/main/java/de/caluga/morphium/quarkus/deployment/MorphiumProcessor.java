@@ -122,8 +122,21 @@ public class MorphiumProcessor {
     // GraalVM native image: reflection registration for @Entity / @Embedded
     // ------------------------------------------------------------------
 
+    /**
+     * Registers Morphium entity class names for GraalVM reflection and stores them in the
+     * {@link MorphiumRecorder} for later use during runtime initialization.
+     *
+     * <p><b>Why {@code STATIC_INIT}:</b> This step writes only into a {@code static volatile}
+     * field in {@code MorphiumRecorder}. It must complete <em>before</em> all
+     * {@code RUNTIME_INIT} steps — in particular before
+     * {@link MorphiumMigrationProcessor#executeMigrations}, which triggers the first CDI lookup
+     * of {@code Morphium} and therefore calls {@code ensureIndicesFor()} on the entity list.
+     * Using {@code RUNTIME_INIT} here caused a race condition: the entity list could still be
+     * empty when {@code Morphium} was first instantiated, resulting in missing unique indexes
+     * and silent {@code saveDuplicate} test failures.
+     */
     @BuildStep
-    @Record(ExecutionTime.RUNTIME_INIT)
+    @Record(ExecutionTime.STATIC_INIT)
     MorphiumEntitiesRegisteredBuildItem registerEntitiesForReflection(BuildProducer<ReflectiveClassBuildItem> reflectiveClasses,
                                        CombinedIndexBuildItem combinedIndex,
                                        MorphiumRecorder recorder) {
