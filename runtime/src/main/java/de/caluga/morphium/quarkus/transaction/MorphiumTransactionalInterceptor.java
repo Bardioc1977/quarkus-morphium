@@ -35,7 +35,7 @@ import jakarta.interceptor.InvocationContext;
  *   <li>Fires {@link Phase#AFTER_COMMIT} after a successful commit.</li>
  *   <li>On exception: aborts, fires {@link Phase#AFTER_ROLLBACK}, re-throws.</li>
  *   <li>On transient MongoDB errors (WriteConflict 112, NoSuchTransaction 251):
- *       retries the entire transaction up to 3 times with linear backoff.</li>
+ *       retries the entire transaction up to 3 times with exponential backoff.</li>
  *   <li>On CosmosDB: skips transaction wrapping but still fires lifecycle events
  *       ({@code BEFORE_COMMIT}/{@code AFTER_COMMIT} on success, {@code AFTER_ROLLBACK}
  *       on exception) so that observers continue to work. A one-time WARN is logged
@@ -146,7 +146,8 @@ public class MorphiumTransactionalInterceptor {
                                 attempt + 1, maxRetries,
                                 e.getMessage());
                         try {
-                            Thread.sleep(50L * (attempt + 1)); // linear backoff
+                            long backoffMs = 50L * (1L << attempt); // exponential: 50, 100, 200ms
+                            Thread.sleep(Math.min(backoffMs, 1000L));
                         } catch (InterruptedException ie) {
                             Thread.currentThread().interrupt();
                             afterRollback.fire(new MorphiumTransactionEvent(Phase.AFTER_ROLLBACK, e));
