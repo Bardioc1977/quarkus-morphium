@@ -136,7 +136,7 @@ public class MorphiumProcessor {
      * and silent {@code saveDuplicate} test failures.
      */
     @BuildStep
-    @Record(ExecutionTime.STATIC_INIT)
+    @Record(ExecutionTime.RUNTIME_INIT)
     MorphiumEntitiesRegisteredBuildItem registerEntitiesForReflection(BuildProducer<ReflectiveClassBuildItem> reflectiveClasses,
                                        CombinedIndexBuildItem combinedIndex,
                                        MorphiumRecorder recorder) {
