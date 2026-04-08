@@ -45,7 +45,6 @@ public class MorphiumStartupCheck implements HealthCheck {
         HealthCheckResponseBuilder builder = HealthCheckResponse.named("Morphium startup check");
         try {
             MorphiumDriver driver = morphium.getDriver();
-            boolean connected = driver.isConnected();
 
             Map<DriverStatsKey, Double> stats = driver.getDriverStats();
             double opened = stats.getOrDefault(DriverStatsKey.CONNECTIONS_OPENED, 0.0);
@@ -53,7 +52,14 @@ public class MorphiumStartupCheck implements HealthCheck {
             builder.withData("database", morphium.getConfig().connectionSettings().getDatabase())
                    .withData("connectionsOpened", (long) opened);
 
-            return builder.status(connected).build();
+            // PooledDriver.isConnected() iterates over the hosts map which may
+            // still be empty during SRV discovery. CONNECTIONS_OPENED is a
+            // monotonically increasing counter that proves at least one TCP
+            // connection was successfully established — regardless of host-map state.
+            // This latch is intentionally one-way: once UP, the startup probe never
+            // returns DOWN — transient disconnects are handled by the liveness probe.
+            boolean everConnected = opened > 0 || driver.isConnected();
+            return builder.status(everConnected).build();
         } catch (Exception e) {
             return builder.down().withData("error", e.getMessage()).build();
         }
