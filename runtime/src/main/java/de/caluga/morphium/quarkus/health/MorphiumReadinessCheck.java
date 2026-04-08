@@ -62,8 +62,13 @@ public class MorphiumReadinessCheck implements HealthCheck {
             // this must never affect the UP/DOWN status.
             try {
                 Map<DriverStatsKey, Double> stats = driver.getDriverStats();
+                long borrowed = toLong(stats, DriverStatsKey.CONNECTIONS_BORROWED);
+                long released = toLong(stats, DriverStatsKey.CONNECTIONS_RELEASED);
                 builder.withData("connectionsInUse", toLong(stats, DriverStatsKey.CONNECTIONS_IN_USE))
                        .withData("connectionsInPool", toLong(stats, DriverStatsKey.CONNECTIONS_IN_POOL))
+                       .withData("connectionsBorrowed", borrowed)
+                       .withData("connectionsReleased", released)
+                       .withData("connectionsBorrowedMinusReleased", borrowed - released)
                        .withData("threadsWaiting", toLong(stats, DriverStatsKey.THREADS_WAITING_FOR_CONNECTION))
                        .withData("errors", toLong(stats, DriverStatsKey.ERRORS));
 
