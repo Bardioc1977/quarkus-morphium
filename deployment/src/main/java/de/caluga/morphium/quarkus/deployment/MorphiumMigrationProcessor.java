@@ -17,8 +17,10 @@ package de.caluga.morphium.quarkus.deployment;
 
 import de.caluga.morphium.quarkus.MorphiumRecorder;
 import de.caluga.morphium.quarkus.migration.MorphiumChangeUnit;
+import io.quarkus.arc.deployment.SyntheticBeansRuntimeInitBuildItem;
 import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
+import io.quarkus.deployment.annotations.Consume;
 import io.quarkus.deployment.annotations.ExecutionTime;
 import io.quarkus.deployment.annotations.Record;
 import io.quarkus.deployment.builditem.CombinedIndexBuildItem;
@@ -93,6 +95,7 @@ public class MorphiumMigrationProcessor {
      */
     @BuildStep
     @Record(ExecutionTime.RUNTIME_INIT)
+    @Consume(SyntheticBeansRuntimeInitBuildItem.class)
     ServiceStartBuildItem executeMigrations(MorphiumRecorder recorder,
                                             MorphiumEntitiesRegisteredBuildItem entitiesRegistered) {
         recorder.runMigrations();
