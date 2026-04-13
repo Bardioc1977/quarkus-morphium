@@ -59,6 +59,14 @@
         </exclusion>
       </exclusions>
     </dependency>
+    <!-- Quarkus TLS Registry — provides TlsConfigurationRegistry to consume
+         standard quarkus.tls.* properties as an SSLContext fallback for MongoDB.
+         Essential for native images where run-quarkus-native.sh writes
+         quarkus.tls.key-store.p12.* / quarkus.tls.trust-store.p12.* properties. -->
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-tls-registry</artifactId>
+    </dependency>
     <!-- Dev Services runtime counterpart (required by Quarkus 3.32+) -->
     <dependency>
       <groupId>io.quarkus</groupId>

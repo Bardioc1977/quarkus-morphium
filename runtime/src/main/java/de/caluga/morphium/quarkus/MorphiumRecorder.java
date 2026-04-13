@@ -45,9 +45,43 @@ public class MorphiumRecorder {
 
     private static volatile List<String> mappedClassNames = Collections.emptyList();
     private static volatile List<String> migrationClassNames = Collections.emptyList();
+    private static volatile List<String> driverClassNames = Collections.emptyList();
+    private static volatile List<String> messagingClassNames = Collections.emptyList();
+    private static volatile List<String> cappedClassNames = Collections.emptyList();
+    private static volatile List<String> entityClassNames = Collections.emptyList();
+    private static volatile List<String> embeddedClassNames = Collections.emptyList();
 
     public void setMappedClassNames(List<String> classNames) {
         mappedClassNames = classNames == null ? Collections.emptyList() : List.copyOf(classNames);
+    }
+
+    public void setDriverClassNames(List<String> classNames) {
+        driverClassNames = classNames == null ? Collections.emptyList() : List.copyOf(classNames);
+        if (!driverClassNames.isEmpty()) {
+            log.debug("Registered {} @Driver classes for native-image pre-population", driverClassNames.size());
+        }
+    }
+
+    public void setMessagingClassNames(List<String> classNames) {
+        messagingClassNames = classNames == null ? Collections.emptyList() : List.copyOf(classNames);
+        if (!messagingClassNames.isEmpty()) {
+            log.debug("Registered {} @Messaging classes for native-image pre-population", messagingClassNames.size());
+        }
+    }
+
+    public void setCappedClassNames(List<String> classNames) {
+        cappedClassNames = classNames == null ? Collections.emptyList() : List.copyOf(classNames);
+        log.debug("Registered {} @Capped classes for native-image pre-population (empty list prevents ClassGraph scan)", cappedClassNames.size());
+    }
+
+    public void setEntityClassNames(List<String> classNames) {
+        entityClassNames = classNames == null ? Collections.emptyList() : List.copyOf(classNames);
+        log.debug("Registered {} @Entity classes for native-image ClassGraphCache pre-population", entityClassNames.size());
+    }
+
+    public void setEmbeddedClassNames(List<String> classNames) {
+        embeddedClassNames = classNames == null ? Collections.emptyList() : List.copyOf(classNames);
+        log.debug("Registered {} @Embedded classes for native-image ClassGraphCache pre-population", embeddedClassNames.size());
     }
 
     public void setMigrationClassNames(List<String> classNames) {
@@ -99,5 +133,25 @@ public class MorphiumRecorder {
 
     static List<String> getMigrationClassNames() {
         return migrationClassNames;
+    }
+
+    static List<String> getDriverClassNames() {
+        return driverClassNames;
+    }
+
+    static List<String> getMessagingClassNames() {
+        return messagingClassNames;
+    }
+
+    static List<String> getCappedClassNames() {
+        return cappedClassNames;
+    }
+
+    static List<String> getEntityClassNames() {
+        return entityClassNames;
+    }
+
+    static List<String> getEmbeddedClassNames() {
+        return embeddedClassNames;
     }
 }

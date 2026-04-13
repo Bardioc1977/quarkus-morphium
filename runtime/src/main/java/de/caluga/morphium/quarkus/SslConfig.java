@@ -90,4 +90,20 @@ public interface SslConfig {
      * Example: {@code CN=myUser,OU=myUnit,O=myOrg,C=DE}
      */
     Optional<String> x509Username();
+
+    /**
+     * Name of a Quarkus TLS configuration (from {@code quarkus.tls.<name>.*}) to use
+     * for the MongoDB connection. The SSLContext is obtained from the Quarkus TLS registry
+     * instead of from explicit keystore/truststore paths.
+     *
+     * <p>Use the special value {@code <default>} to explicitly select the unnamed default
+     * TLS configuration.
+     *
+     * <p>When absent and no explicit {@link #keystorePath()} / {@link #truststorePath()}
+     * is configured, the extension automatically falls back to the default (unnamed) Quarkus
+     * TLS configuration if one is available. This is the recommended setup for native images
+     * where the runtime script writes {@code quarkus.tls.key-store.p12.*} /
+     * {@code quarkus.tls.trust-store.p12.*} properties.
+     */
+    Optional<String> tlsConfigurationName();
 }

@@ -25,6 +25,7 @@ import io.quarkus.deployment.builditem.CombinedIndexBuildItem;
 import io.quarkus.deployment.builditem.ServiceStartBuildItem;
 import io.quarkus.deployment.builditem.nativeimage.ReflectiveClassBuildItem;
 import org.jboss.jandex.AnnotationInstance;
+import org.jboss.jandex.AnnotationTarget;
 import org.jboss.jandex.DotName;
 import org.jboss.jandex.IndexView;
 import org.jboss.logging.Logger;
@@ -58,7 +59,7 @@ public class MorphiumMigrationProcessor {
         List<String> migrationClassNames = new ArrayList<>();
 
         for (AnnotationInstance ai : index.getAnnotations(CHANGE_UNIT)) {
-            if (ai.target().kind() != org.jboss.jandex.AnnotationTarget.Kind.CLASS) {
+            if (ai.target().kind() != AnnotationTarget.Kind.CLASS) {
                 continue;
             }
             String className = ai.target().asClass().name().toString();

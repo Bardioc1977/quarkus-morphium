@@ -40,6 +40,13 @@
     <!-- ClassGraph for @Entity scanning during build.
          Comes transitively from quarkus-morphium (runtime) → morphium. -->
 
+    <!-- TLS registry deployment — required by Quarkus extension parity verification
+         because the runtime module depends on quarkus-tls-registry. -->
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-tls-registry-deployment</artifactId>
+    </dependency>
+
     <!-- Dev Services infrastructure – converts DevServicesResultBuildItem
          into DevServiceDescriptionBuildItem so the container appears
          in the Dev UI "Dev Services" panel. -->
